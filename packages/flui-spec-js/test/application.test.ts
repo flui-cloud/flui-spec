@@ -59,7 +59,7 @@ describe('validate(Application)', () => {
   });
 
   it('rejects when deploy is missing', () => {
-    const yaml = VALID.replace(/deploy:\n  port: 3000\n?/, '');
+    const yaml = VALID.replace(/deploy:\n {2}port: 3000\n?/, '');
     const r = validate(parseYaml(yaml));
     expect(r.valid).toBe(false);
     if (!r.valid) {
@@ -128,19 +128,7 @@ describe('validate(CatalogApp) — extra branches', () => {
 
   it('reports duplicate refs in linkedBuildingBlocks', () => {
     const pgweb = readFileSync(
-      resolve(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        '..',
-        'flui.api',
-        'src',
-        'modules',
-        'catalog',
-        'seed',
-        'pgweb.flui.yaml',
-      ),
+      resolve(__dirname, 'fixtures', 'pgweb-with-linked-bb.flui.yaml'),
       'utf-8',
     );
     const parsed = parseYaml(pgweb) as {
