@@ -1,0 +1,18 @@
+{
+  "name": "flui-spec-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Workspace root for the Flui Spec.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@9.12.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "pnpm --filter @flui-cloud/spec test",
+    "test:coverage": "pnpm --filter @flui-cloud/spec exec vitest run --coverage",
+    "build": "pnpm --filter @flui-cloud/spec build",
+    "lint": "pnpm --filter @flui-cloud/spec lint",
+    "sonar:scan": "pnpm test:coverage && bash -c 'set -a && [ -f .env.local ] && source .env.local; set +a; docker run --rm -e SONAR_HOST_URL=${SONAR_HOST_URL:-http://host.docker.internal:9000} -e SONAR_TOKEN=$SONAR_TOKEN -e SONAR_SCANNER_OPTS=\"-Dsonar.projectKey=${SONAR_PROJECT_KEY:-FluiSpec}\" -v \"$PWD:/usr/src\" sonarsource/sonar-scanner-cli'"
+  }
+}

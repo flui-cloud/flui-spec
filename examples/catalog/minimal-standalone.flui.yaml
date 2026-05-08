@@ -1,0 +1,38 @@
+apiVersion: flui.cloud/v1beta1
+kind: CatalogApp
+metadata:
+  id: hello-world
+  name: Hello World
+  description: Minimal example catalog app demonstrating the manifest shape.
+  appKind: APPLICATION
+  category: example
+  version: 1.0.0
+  license: Apache-2.0
+spec:
+  type: standalone
+  image:
+    registry: docker.io
+    repository: library/nginx
+    tag: 1.27-alpine
+  ports:
+    - name: http
+      internal: 80
+      expose: true
+      protocol: http
+  env: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  scaling:
+    horizontal:
+      enabled: false
+    vertical:
+      enabled: false
+  healthcheck:
+    type: http
+    path: /
+    port: 80

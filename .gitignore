@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.pnpm-store/
+coverage/
+.turbo/
+.vscode/
+.scannerwork/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
