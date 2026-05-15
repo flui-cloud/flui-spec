@@ -53,11 +53,18 @@ export type CatalogSpec =
 
 export type CatalogExposure = 'public' | 'internal';
 
+export type CatalogPersistenceScope = 'shared' | 'dedicated';
+
+export interface CatalogPersistence {
+  scope: CatalogPersistenceScope;
+}
+
 export interface CatalogSpecStandalone {
   type: CatalogAppType.STANDALONE;
   image: CatalogImageSource;
   ports: CatalogPort[];
   volumes?: CatalogVolume[];
+  persistence?: CatalogPersistence;
   env: CatalogEnvVar[];
   resources: CatalogResources;
   scaling: CatalogScaling;
@@ -89,6 +96,7 @@ export interface CatalogSpecBuildingBlock {
   image: CatalogImageSource;
   ports: CatalogPort[];
   volumes?: CatalogVolume[];
+  persistence?: CatalogPersistence;
   env: CatalogEnvVar[];
   resources: CatalogResources;
   scaling: CatalogScaling;
@@ -136,6 +144,7 @@ export interface CatalogComponent {
   image: CatalogImageSource;
   ports?: CatalogPort[];
   volumes?: CatalogVolume[];
+  persistence?: CatalogPersistence;
   env: CatalogEnvVar[];
   resources: CatalogResources;
   scaling: CatalogScaling;
