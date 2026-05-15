@@ -200,6 +200,9 @@
             "$ref": "#/definitions/volume"
           }
         },
+        "persistence": {
+          "$ref": "#/definitions/persistence"
+        },
         "env": {
           "type": "array",
           "items": {
@@ -279,6 +282,9 @@
           "items": {
             "$ref": "#/definitions/volume"
           }
+        },
+        "persistence": {
+          "$ref": "#/definitions/persistence"
         },
         "env": {
           "type": "array",
@@ -382,6 +388,9 @@
           "items": {
             "$ref": "#/definitions/volume"
           }
+        },
+        "persistence": {
+          "$ref": "#/definitions/persistence"
         },
         "env": {
           "type": "array",
@@ -511,6 +520,19 @@
         },
         "size": {
           "type": "string"
+        }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "required": [
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["shared", "dedicated"]
         }
       }
     },
