@@ -15,7 +15,10 @@
       "const": "CatalogApp"
     },
     "apiVersion": {
-      "enum": ["flui.cloud/v1beta1", "flui/v1"]
+      "enum": [
+        "flui.cloud/v1beta1",
+        "flui/v1"
+      ]
     },
     "metadata": {
       "$ref": "#/definitions/metadata"
@@ -50,7 +53,12 @@
         },
         "appKind": {
           "type": "string",
-          "enum": ["DATABASE", "APPLICATION", "TOOL", "SYSTEM"]
+          "enum": [
+            "DATABASE",
+            "APPLICATION",
+            "TOOL",
+            "SYSTEM"
+          ]
         },
         "category": {
           "type": "string",
@@ -153,7 +161,7 @@
         },
         "draft": {
           "type": "boolean",
-          "description": "When true, the manifest is seeded but kept unpublished — it does not appear in GET /catalog and cannot be installed by end users. Use for work-in-progress entries kept in the repo."
+          "description": "When true, the manifest is seeded but kept unpublished \u2014 it does not appear in GET /catalog and cannot be installed by end users. Use for work-in-progress entries kept in the repo."
         }
       }
     },
@@ -231,6 +239,9 @@
         "auth": {
           "$ref": "#/definitions/auth"
         },
+        "postInstall": {
+          "$ref": "#/definitions/postInstall"
+        },
         "startCommand": {
           "type": "string"
         },
@@ -304,6 +315,9 @@
         "auth": {
           "$ref": "#/definitions/auth"
         },
+        "postInstall": {
+          "$ref": "#/definitions/postInstall"
+        },
         "startCommand": {
           "type": "string"
         },
@@ -347,6 +361,9 @@
         "auth": {
           "$ref": "#/definitions/auth"
         },
+        "postInstall": {
+          "$ref": "#/definitions/postInstall"
+        },
         "components": {
           "type": "array",
           "minItems": 1,
@@ -356,6 +373,31 @@
         },
         "smokeTest": {
           "$ref": "#/definitions/smokeTest"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "default": {
+                "type": "boolean"
+              }
+            }
+          }
         }
       }
     },
@@ -411,6 +453,15 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "option": {
+              "type": "string"
+            }
           }
         }
       }
@@ -532,7 +583,10 @@
       "properties": {
         "scope": {
           "type": "string",
-          "enum": ["shared", "dedicated"]
+          "enum": [
+            "shared",
+            "dedicated"
+          ]
         }
       }
     },
@@ -941,6 +995,12 @@
         "retries": {
           "type": "integer",
           "minimum": 1
+        },
+        "httpHeaders": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
@@ -1021,16 +1081,61 @@
       },
       "oneOf": [
         {
-          "required": ["fromService"],
-          "not": { "anyOf": [{ "required": ["fromBBEnv"] }, { "required": ["value"] }] }
+          "required": [
+            "fromService"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "fromBBEnv"
+                ]
+              },
+              {
+                "required": [
+                  "value"
+                ]
+              }
+            ]
+          }
         },
         {
-          "required": ["fromBBEnv"],
-          "not": { "anyOf": [{ "required": ["fromService"] }, { "required": ["value"] }] }
+          "required": [
+            "fromBBEnv"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "fromService"
+                ]
+              },
+              {
+                "required": [
+                  "value"
+                ]
+              }
+            ]
+          }
         },
         {
-          "required": ["value"],
-          "not": { "anyOf": [{ "required": ["fromService"] }, { "required": ["fromBBEnv"] }] }
+          "required": [
+            "value"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "fromService"
+                ]
+              },
+              {
+                "required": [
+                  "fromBBEnv"
+                ]
+              }
+            ]
+          }
         }
       ]
     },
@@ -1059,12 +1164,28 @@
     },
     "auth": {
       "type": "object",
-      "required": [
-        "mode"
-      ],
       "additionalProperties": false,
       "properties": {
         "mode": {
+          "enum": [
+            "oidc",
+            "proxy",
+            "native",
+            "none"
+          ]
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "oidc",
+              "proxy",
+              "native",
+              "none"
+            ]
+          }
+        },
+        "default": {
           "enum": [
             "oidc",
             "proxy",
@@ -1078,6 +1199,32 @@
           "properties": {
             "redirectPath": {
               "type": "string"
+            },
+            "redirectPaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "configFile": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "env",
+                "template"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "env": {
+                  "type": "string"
+                },
+                "template": {
+                  "type": "string"
+                }
+              }
             },
             "scopes": {
               "type": "array",
@@ -1112,6 +1259,111 @@
             "headerMapping": {
               "type": "object",
               "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "postInstall": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "when": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "authMode": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "oidc",
+                      "proxy",
+                      "native",
+                      "none"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "oidc",
+                        "proxy",
+                        "native",
+                        "none"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "option": {
+                "type": "string"
+              }
+            }
+          },
+          "http": {
+            "type": "object",
+            "required": [
+              "method",
+              "path"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {
+                "type": "string"
+              },
+              "expectStatus": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "exec": {
+            "type": "object",
+            "required": [
+              "command"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "container": {
                 "type": "string"
               }
             }

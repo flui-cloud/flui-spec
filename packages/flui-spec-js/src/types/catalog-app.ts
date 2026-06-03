@@ -73,6 +73,7 @@ export interface CatalogSpecStandalone {
   privatizable?: boolean;
   domain?: CatalogDomainSpec;
   auth?: CatalogAuth;
+  postInstall?: CatalogPostInstallStep[];
   startCommand?: string;
   linkedBuildingBlocks?: CatalogLinkedBuildingBlock[];
   dependencies?: CatalogDependency[];
@@ -103,6 +104,7 @@ export interface CatalogSpecBuildingBlock {
   healthcheck: CatalogHealthcheck;
   startCommand?: string;
   auth?: CatalogAuth;
+  postInstall?: CatalogPostInstallStep[];
   smokeTest?: CatalogSmokeTest;
   dependencies?: CatalogDependency[];
 }
@@ -113,30 +115,84 @@ export interface CatalogSpecComposed {
   networking?: CatalogComposedNetworking;
   domain?: CatalogDomainSpec;
   auth?: CatalogAuth;
+  /** Install-time feature toggles; gate components & postInstall via `when.option`. */
+  options?: CatalogOption[];
+  postInstall?: CatalogPostInstallStep[];
   components: CatalogComponent[];
+}
+
+export interface CatalogOption {
+  key: string;
+  label: string;
+  description?: string;
+  /** Pre-selected state when the installer offers the toggle. */
+  default?: boolean;
 }
 
 export type CatalogAuthMode = 'oidc' | 'proxy' | 'native' | 'none';
 
 export interface CatalogAuth {
-  mode: CatalogAuthMode;
+  /** Single fixed mode (legacy/shorthand). Prefer `modes` + `default`. */
+  mode?: CatalogAuthMode;
+  /** Methods the app offers; the installer lets the user pick one. */
+  modes?: CatalogAuthMode[];
+  /** Pre-selected method at install time when `modes` is offered. */
+  default?: CatalogAuthMode;
   oidc?: CatalogAuthOidc;
   proxy?: CatalogAuthProxy;
 }
 
 export interface CatalogAuthOidc {
   redirectPath?: string;
+  /** Redirect/callback paths registered on the IdP client (host added at install). */
+  redirectPaths?: string[];
   scopes?: string[];
+  /** Env-based injection: maps OIDC values to the app's env var names. */
   envMapping?: {
     issuerUrl?: string;
     clientId?: string;
     clientSecret?: string;
     enabledFlag?: string;
   };
+  /** File-based injection: render `template` (with {{oidc.*}}) to `path`, point `env` at it. */
+  configFile?: {
+    path: string;
+    env: string;
+    template: string;
+  };
 }
 
 export interface CatalogAuthProxy {
   headerMapping?: Record<string, string>;
+}
+
+export interface CatalogPostInstallStep {
+  name: string;
+  description?: string;
+  /** Gate: step runs only if the install context matches (AND of keys). */
+  when?: {
+    authMode?: CatalogAuthMode | CatalogAuthMode[];
+    /** Runs only if this install-time option (spec.options[].key) is enabled. */
+    option?: string;
+  };
+  http?: {
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    /** Relative to the app's primary endpoint URL. */
+    path: string;
+    headers?: Record<string, string>;
+    body?: string;
+    /** Status codes treated as success (e.g. [200,201,400] to tolerate "exists"). */
+    expectStatus?: number[];
+  };
+  /**
+   * Runs a command inside the primary component's pod. For apps configured via
+   * a CLI rather than HTTP/config-file (e.g. Nextcloud `occ`). Args are templated
+   * ({{install.resolvedFqdn}}, {{oidc.*}}, {{generate.password}}).
+   */
+  exec?: {
+    command: string[];
+    container?: string;
+  };
 }
 
 export interface CatalogComponent {
@@ -150,6 +206,11 @@ export interface CatalogComponent {
   scaling: CatalogScaling;
   healthcheck?: CatalogHealthcheck;
   dependsOn?: string[];
+  /** Component is created only if the gate matches (e.g. an optional feature). */
+  when?: {
+    /** Created only if this install-time option (spec.options[].key) is enabled. */
+    option?: string;
+  };
 }
 
 export interface CatalogComposedNetworking {
@@ -312,6 +373,12 @@ export interface CatalogHealthcheck {
   path?: string;
   port?: number;
   command?: string[];
+  /**
+   * Extra HTTP request headers for the probe (http type only). Use to send a
+   * trusted `Host` (e.g. localhost) to apps that reject unknown Hosts on their
+   * health path — the kubelet otherwise sends the pod IP, which such apps 400.
+   */
+  httpHeaders?: Record<string, string>;
   initialDelay?: string;
   interval?: string;
   timeout?: string;
