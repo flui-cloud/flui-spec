@@ -266,6 +266,7 @@ export interface CatalogVolume {
 export interface CatalogEnvVar {
   name: string;
   value?: string;
+  secret?: boolean;
   valueFrom?: CatalogValueFrom;
   userEditable?: boolean;
   description?: string;

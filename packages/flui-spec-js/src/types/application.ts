@@ -3,6 +3,7 @@ import type { FluiApiVersion } from './api-version';
 export interface ApplicationManifestEnvVar {
   name: string;
   value?: string;
+  secret?: boolean;
   valueFrom?: {
     generate?: 'secret';
     length?: number;

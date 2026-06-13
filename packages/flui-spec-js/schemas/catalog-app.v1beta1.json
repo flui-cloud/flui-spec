@@ -604,6 +604,10 @@
         "value": {
           "type": "string"
         },
+        "secret": {
+          "type": "boolean",
+          "description": "When true, the resolved value is stored in the component's Secret (encrypted at rest) and injected via secretKeyRef, never as a plaintext ConfigMap entry. Use it on any env carrying sensitive data — typically a `value` that references another component's secret (e.g. a database password). `valueFrom.generate` and a `userInput` marked `sensitive` are always treated as secrets regardless of this flag."
+        },
         "valueFrom": {
           "$ref": "#/definitions/valueFrom"
         },
