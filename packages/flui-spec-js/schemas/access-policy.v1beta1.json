@@ -1,0 +1,227 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://flui.cloud/schema/access-policy/v1beta1.json",
+  "title": "Flui Access Policy Manifest (v1beta1)",
+  "type": "object",
+  "required": [
+    "kind",
+    "apiVersion",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "const": "AccessPolicy"
+    },
+    "apiVersion": {
+      "enum": [
+        "flui.cloud/v1beta1",
+        "flui/v1"
+      ]
+    },
+    "metadata": {
+      "$ref": "#/definitions/metadata"
+    },
+    "spec": {
+      "$ref": "#/definitions/spec"
+    }
+  },
+  "definitions": {
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": [
+        "bindings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/binding"
+          }
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "required": [
+        "principal",
+        "role",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "principal": {
+          "$ref": "#/definitions/principal"
+        },
+        "role": {
+          "$ref": "#/definitions/role"
+        },
+        "scope": {
+          "$ref": "#/definitions/scope"
+        }
+      }
+    },
+    "principal": {
+      "type": "object",
+      "required": [
+        "type",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "user",
+            "group",
+            "service_account"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Symbolic principal reference: email (user), group name (group), or service-account id."
+        }
+      }
+    },
+    "role": {
+      "enum": [
+        "viewer",
+        "editor",
+        "manager"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "global"
+            }
+          }
+        },
+        {
+          "required": [
+            "section"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "section"
+            },
+            "section": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "required": [
+            "cluster"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "cluster"
+            },
+            "cluster": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Cluster id or name; resolved to cluster_id at apply time."
+            }
+          }
+        },
+        {
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "selector"
+            },
+            "selector": {
+              "$ref": "#/definitions/selector"
+            }
+          }
+        }
+      ]
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Closed attribute set; clauses are AND-ed. No OR, regex, or functions.",
+      "properties": {
+        "slugs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "App slug is one of these (membership / IN). A single app is a one-element list."
+        },
+        "type": {
+          "enum": [
+            "system",
+            "user"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "App kind/category — matched against the live app taxonomy at apply time. Intentionally NOT enumerated: the taxonomy is evolving toward cloud-provider-style categories."
+        },
+        "clusterId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clusterName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "App carries ALL of these tags (AND / contains)."
+        }
+      }
+    }
+  }
+}

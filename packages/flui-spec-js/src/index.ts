@@ -3,6 +3,11 @@ export { parseYaml, computeChecksum, stableStringify, FluiYamlParseError } from 
 export {
   validate,
   type FluiValidationError,
+  type FluiValidationWarning,
   type FluiValidationResult,
 } from './validate';
-export { catalogAppSchema } from './schemas';
+export {
+  catalogAppSchema,
+  applicationSchema,
+  accessPolicySchema,
+} from './schemas';

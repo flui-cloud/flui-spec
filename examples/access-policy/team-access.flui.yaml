@@ -1,0 +1,65 @@
+apiVersion: flui.cloud/v1beta1
+kind: AccessPolicy
+metadata:
+  name: acme-team-access
+  description: Access grants for the Acme platform team.
+spec:
+  bindings:
+    # A person, platform-wide.
+    - principal:
+        type: user
+        ref: alice@acme.com
+      role: manager
+      scope:
+        type: global
+
+    # A group, read-only on everything in one cluster (= one environment).
+    - principal:
+        type: group
+        ref: platform
+      role: viewer
+      scope:
+        type: cluster
+        cluster: prod-eu
+
+    # A group, full app rights on a project's apps (selector = AND of clauses).
+    - principal:
+        type: group
+        ref: acme-team
+      role: editor
+      scope:
+        type: selector
+        selector:
+          project: acme
+          type: user
+
+    # A group, full app rights scoped to database apps (Editor @ kind=DATABASE).
+    - principal:
+        type: group
+        ref: dba
+      role: editor
+      scope:
+        type: selector
+        selector:
+          kind: DATABASE
+
+    # A person, read-only on a hand-picked set of apps (multiselect → slugs).
+    - principal:
+        type: user
+        ref: bob@acme.com
+      role: viewer
+      scope:
+        type: selector
+        selector:
+          slugs:
+            - acme-api
+            - acme-web
+
+    # A CI service account, scoped to a portal section.
+    - principal:
+        type: service_account
+        ref: ci-deployer
+      role: editor
+      scope:
+        type: section
+        section: catalog

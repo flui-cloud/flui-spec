@@ -40,6 +40,11 @@ export interface ApplicationManifestScaling {
 export interface ApplicationManifestDomain {
   auto?: boolean;
   tls?: boolean;
+  /**
+   * Explicit FQDN to expose the app on (apex, or a subdomain on another zone).
+   * Bypasses the cluster's assigned zone — taken verbatim.
+   */
+  fqdn?: string;
   hostnameMode?: 'ip' | 'domain';
   certChallenge?: 'http-01' | 'dns-01';
   certificateProvider?: 'lets-encrypt' | 'lets-encrypt-staging';

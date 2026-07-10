@@ -1,8 +1,9 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import { catalogAppSchema } from './schemas';
+import { catalogAppSchema, applicationSchema, accessPolicySchema } from './schemas';
 import type { CatalogAppManifest, CatalogComponent } from './types/catalog-app';
 import type { ApplicationManifest } from './types/application';
+import type { AccessPolicyManifest } from './types/access-policy';
 import type { FluiManifest } from './types';
 
 export interface FluiValidationError {
@@ -11,14 +12,37 @@ export interface FluiValidationError {
   params?: Record<string, unknown>;
 }
 
+/**
+ * A non-fatal advisory. Emitted when a manifest uses a field the spec accepts
+ * but the runtime does not yet apply (`x-flui-status: planned`). Warnings never
+ * make a manifest invalid — they tell the author (or an LLM) the field will
+ * have no effect at runtime yet.
+ */
+export interface FluiValidationWarning {
+  path: string;
+  message: string;
+}
+
 export type FluiValidationResult =
-  | { valid: true; manifest: FluiManifest; errors: [] }
-  | { valid: false; manifest: null; errors: FluiValidationError[] };
+  | {
+      valid: true;
+      manifest: FluiManifest;
+      errors: [];
+      warnings: FluiValidationWarning[];
+    }
+  | {
+      valid: false;
+      manifest: null;
+      errors: FluiValidationError[];
+      warnings: [];
+    };
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 addFormats(ajv);
 
 const validateCatalogApp: ValidateFunction = ajv.compile(catalogAppSchema);
+const validateApplication: ValidateFunction = ajv.compile(applicationSchema);
+const validateAccessPolicy: ValidateFunction = ajv.compile(accessPolicySchema);
 
 export function validate(parsed: unknown): FluiValidationResult {
   if (!parsed || typeof parsed !== 'object') {
@@ -35,14 +59,31 @@ export function validate(parsed: unknown): FluiValidationResult {
   if (kind === 'Application') {
     return validateApplicationManifest(parsed);
   }
+  if (kind === 'AccessPolicy') {
+    return validateAccessPolicyManifest(parsed);
+  }
   return failed([
     {
       path: '/kind',
       message:
-        'unsupported kind — expected "Application" or "CatalogApp"',
+        'unsupported kind — expected "Application", "CatalogApp", or "AccessPolicy"',
       params: { received: kind },
     },
   ]);
+}
+
+function validateAccessPolicyManifest(
+  parsed: unknown,
+): FluiValidationResult {
+  if (!validateAccessPolicy(parsed)) {
+    return failed(formatAjvErrors(validateAccessPolicy.errors ?? []));
+  }
+  return {
+    valid: true,
+    manifest: parsed as AccessPolicyManifest,
+    errors: [],
+    warnings: [],
+  };
 }
 
 function validateCatalogAppManifest(
@@ -56,53 +97,79 @@ function validateCatalogAppManifest(
   if (semantic.length > 0) {
     return failed(semantic);
   }
-  return { valid: true, manifest, errors: [] };
+  return { valid: true, manifest, errors: [], warnings: [] };
 }
 
 function validateApplicationManifest(
   parsed: unknown,
 ): FluiValidationResult {
-  // Application schema not yet published as standalone JSON Schema —
-  // perform minimal hand-written checks here for v1beta1. A full schema
-  // will land before the v1 promotion.
-  const errors: FluiValidationError[] = [];
-  const m = parsed as Partial<ApplicationManifest>;
+  if (!validateApplication(parsed)) {
+    return failed(formatAjvErrors(validateApplication.errors ?? []));
+  }
+  const manifest = parsed as ApplicationManifest;
+  return {
+    valid: true,
+    manifest,
+    errors: [],
+    warnings: collectApplicationWarnings(manifest),
+  };
+}
 
-  if (m.apiVersion !== 'flui.cloud/v1beta1' && m.apiVersion !== 'flui/v1') {
-    errors.push({
-      path: '/apiVersion',
-      message:
-        'must be "flui.cloud/v1beta1" (or legacy "flui/v1")',
-      params: { received: m.apiVersion },
-    });
-  }
-  if (!m.metadata || typeof m.metadata.name !== 'string') {
-    errors.push({
-      path: '/metadata/name',
-      message: 'metadata.name is required and must be a string',
-    });
-  } else if (!/^[a-z][a-z0-9-]{0,62}$/.test(m.metadata.name)) {
-    errors.push({
-      path: '/metadata/name',
-      message:
-        'metadata.name must match ^[a-z][a-z0-9-]{0,62}$',
-      params: { received: m.metadata.name },
-    });
-  }
-  if (!m.deploy || typeof m.deploy !== 'object') {
-    errors.push({
-      path: '/deploy',
-      message: 'deploy is required and must be an object',
-    });
-  } else if (typeof m.deploy.port !== 'number') {
-    errors.push({
-      path: '/deploy/port',
-      message: 'deploy.port is required and must be a number',
-    });
-  }
+/**
+ * Advisories for `x-flui-status: planned` fields present in a valid Application
+ * manifest — kept in lockstep with the `planned` tags in
+ * `schemas/application.v1beta1.json` (see application.test.ts, which asserts
+ * every path here is tagged planned in the schema).
+ */
+function collectApplicationWarnings(
+  manifest: ApplicationManifest,
+): FluiValidationWarning[] {
+  const warnings: FluiValidationWarning[] = [];
+  const deploy = manifest.deploy;
+  if (!deploy) return warnings;
 
-  if (errors.length > 0) return failed(errors);
-  return { valid: true, manifest: parsed as ApplicationManifest, errors: [] };
+  const NOT_APPLIED = 'accepted by the spec but not yet applied on source deploys';
+
+  if (deploy.resources?.profile !== undefined) {
+    warnings.push({
+      path: '/deploy/resources/profile',
+      message: `resources.profile is ${NOT_APPLIED} — set resources.requests/limits instead (no effect at runtime yet).`,
+    });
+  }
+  if (deploy.scaling !== undefined) {
+    warnings.push({
+      path: '/deploy/scaling',
+      message: `deploy.scaling is ${NOT_APPLIED} — autoscaling is not configured from the manifest yet; the app runs at a single replica.`,
+    });
+  }
+  (deploy.env ?? []).forEach((e, i) => {
+    if (e.valueFrom !== undefined) {
+      warnings.push({
+        path: `/deploy/env/${i}/valueFrom`,
+        message: `env "${e.name}".valueFrom is ${NOT_APPLIED} — only env vars with a literal value are injected today; this one will be dropped.`,
+      });
+    }
+    if (e.secret !== undefined) {
+      warnings.push({
+        path: `/deploy/env/${i}/secret`,
+        message: `env "${e.name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
+      });
+    }
+    if (e.userEditable !== undefined) {
+      warnings.push({
+        path: `/deploy/env/${i}/userEditable`,
+        message: `env "${e.name}".userEditable is ${NOT_APPLIED} (no effect at runtime yet).`,
+      });
+    }
+    if (e.value === undefined && e.valueFrom === undefined) {
+      warnings.push({
+        path: `/deploy/env/${i}`,
+        message: `env "${e.name}" has neither value nor valueFrom — it will not be injected.`,
+      });
+    }
+  });
+
+  return warnings;
 }
 
 function runCatalogSemanticChecks(
@@ -209,13 +276,25 @@ function detectCycles(
 }
 
 function formatAjvErrors(errors: ErrorObject[]): FluiValidationError[] {
-  return errors.map((e) => ({
-    path: e.instancePath || '<root>',
-    message: e.message ?? 'invalid',
-    params: e.params as Record<string, unknown> | undefined,
-  }));
+  return errors.map((e) => {
+    // For `required`, ajv reports the parent object's path with the missing key
+    // in params. Point the error at the missing field itself — friendlier for
+    // humans and for LLMs consuming the error list.
+    const missing =
+      e.keyword === 'required'
+        ? (e.params as { missingProperty?: string }).missingProperty
+        : undefined;
+    const path = missing
+      ? `${e.instancePath}/${missing}`
+      : e.instancePath || '<root>';
+    return {
+      path,
+      message: e.message ?? 'invalid',
+      params: e.params as Record<string, unknown> | undefined,
+    };
+  });
 }
 
 function failed(errors: FluiValidationError[]): FluiValidationResult {
-  return { valid: false, manifest: null, errors };
+  return { valid: false, manifest: null, errors, warnings: [] };
 }

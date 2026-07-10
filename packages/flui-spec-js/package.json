@@ -1,6 +1,6 @@
 {
   "name": "@flui-cloud/spec",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "description": "Open specification, JSON Schema and TypeScript types for the flui.yaml application manifest.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/flui-cloud/flui-spec",
@@ -29,6 +29,7 @@
     },
     "./schemas/catalog-app.v1beta1.json": "./schemas/catalog-app.v1beta1.json",
     "./schemas/application.v1beta1.json": "./schemas/application.v1beta1.json",
+    "./schemas/access-policy.v1beta1.json": "./schemas/access-policy.v1beta1.json",
     "./package.json": "./package.json"
   },
   "bin": {
