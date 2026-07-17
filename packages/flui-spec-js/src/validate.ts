@@ -130,6 +130,11 @@ function collectApplicationWarnings(
 
   const NOT_APPLIED = 'accepted by the spec but not yet applied on source deploys';
 
+  // secretRef and service resolve on source deploys today; only generate and
+  // userInput remain planned. Warn about the latter two, not any valueFrom.
+  const plannedValueFrom = (vf: { generate?: unknown; userInput?: unknown } | undefined) =>
+    vf != null && (vf.generate !== undefined || vf.userInput !== undefined);
+
   if (deploy.resources?.profile !== undefined) {
     warnings.push({
       path: '/deploy/resources/profile',
@@ -151,10 +156,10 @@ function collectApplicationWarnings(
         'the array form of deploy.env is deprecated — prefer the map form { NAME: value }. The array is still accepted and applied.',
     });
     env.forEach((e, i) => {
-      if (e.valueFrom !== undefined) {
+      if (plannedValueFrom(e.valueFrom)) {
         warnings.push({
           path: `/deploy/env/${i}/valueFrom`,
-          message: `env "${e.name}".valueFrom is ${NOT_APPLIED} — only env vars with a literal value are injected today; this one will be dropped.`,
+          message: `env "${e.name}".valueFrom (generate/userInput) is ${NOT_APPLIED} — secretRef and service resolve, but a generated or prompted value is dropped.`,
         });
       }
       if (e.secret !== undefined) {
@@ -179,10 +184,10 @@ function collectApplicationWarnings(
   } else if (env && typeof env === 'object') {
     for (const [name, entry] of Object.entries(env)) {
       if (typeof entry === 'string') continue; // literal shorthand — applied today
-      if (entry.valueFrom !== undefined) {
+      if (plannedValueFrom(entry.valueFrom)) {
         warnings.push({
           path: `/deploy/env/${name}/valueFrom`,
-          message: `env "${name}".valueFrom is ${NOT_APPLIED} — only entries with a literal value are injected today; this one will be dropped.`,
+          message: `env "${name}".valueFrom (generate/userInput) is ${NOT_APPLIED} — secretRef and service resolve, but a generated or prompted value is dropped.`,
         });
       }
       if (entry.secret !== undefined) {
@@ -204,13 +209,6 @@ function collectApplicationWarnings(
         });
       }
     }
-  }
-
-  if (manifest.environments !== undefined) {
-    warnings.push({
-      path: '/environments',
-      message: `environments is ${NOT_APPLIED} — per-environment profiles are validated but not yet resolved; the base spec is deployed regardless of environment.`,
-    });
   }
 
   return warnings;

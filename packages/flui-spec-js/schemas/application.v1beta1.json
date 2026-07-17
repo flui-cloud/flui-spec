@@ -102,8 +102,7 @@
     },
     "environments": {
       "type": "object",
-      "x-flui-status": "planned",
-      "x-flui-note": "Not yet applied on source deploys — per-environment profiles are accepted and validated, but the runtime does not yet resolve them. Today the base spec is deployed regardless of environment.",
+      "x-flui-note": "Applied on git-driven deploys: a push (or `flui deploy`) on a branch bound here overlays that profile — env literals plus the whitelisted deploy fields. Resolution is branch-scoped, so a plain validate (no branch) reports the base spec.",
       "propertyNames": {
         "pattern": "^[a-z]([a-z0-9-]{0,30}[a-z0-9])?$",
         "description": "Environment name: production, staging, preview, dev…"
@@ -205,8 +204,7 @@
             "value": { "type": "string", "description": "Literal runtime value." },
             "valueFrom": {
               "$ref": "#/definitions/valueFrom",
-              "x-flui-status": "planned",
-              "x-flui-note": "Not yet applied on source deploys — only entries with a literal `value` are injected today. A valueFrom entry is currently dropped."
+              "x-flui-note": "secretRef (a Kubernetes secretKeyRef) and service (a sibling app's in-cluster address) are applied on source deploys. generate and userInput are planned — see those branches."
             },
             "delivery": {
               "enum": ["runtime", "browser", "build"],
@@ -245,8 +243,7 @@
         },
         "valueFrom": {
           "$ref": "#/definitions/valueFrom",
-          "x-flui-status": "planned",
-          "x-flui-note": "Not yet applied on source deploys — only env vars with a literal `value` are injected today. A valueFrom env is currently dropped."
+          "x-flui-note": "secretRef (a Kubernetes secretKeyRef) and service (a sibling app's in-cluster address) are applied on source deploys. generate and userInput are planned — see those branches."
         },
         "userEditable": {
           "type": "boolean",
@@ -262,6 +259,8 @@
           "type": "object",
           "required": ["generate", "length"],
           "additionalProperties": false,
+          "x-flui-status": "planned",
+          "x-flui-note": "Not yet applied on source deploys — a value is not generated today, so the entry is dropped.",
           "properties": {
             "generate": { "const": "secret" },
             "length": { "type": "integer", "minimum": 8, "maximum": 256 },
@@ -282,12 +281,12 @@
             "service": {
               "type": "string",
               "pattern": "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$",
-              "description": "Name of another Flui app in the same project. Resolved to that app's endpoint in the CURRENT environment's scope — so the same reference points at staging's instance in staging and production's in production."
+              "description": "Name of another Flui app in the same project. Resolved to that app's in-cluster Service address (the same DNS Flui uses to wire catalog building blocks); app-to-app traffic stays inside the cluster and never round-trips the public ingress. Cross-cluster references are not resolved. Per-environment scoping arrives with the environments block."
             },
             "key": {
               "enum": ["url", "host", "port"],
               "default": "url",
-              "description": "Which attribute of the referenced service to inject. Defaults to its public URL."
+              "description": "Which attribute of the referenced service to inject. Defaults to its in-cluster URL (http://<slug>-svc.<namespace>.svc.cluster.local:<port>)."
             }
           }
         },
@@ -295,6 +294,8 @@
           "type": "object",
           "required": ["userInput"],
           "additionalProperties": false,
+          "x-flui-status": "planned",
+          "x-flui-note": "Not yet applied on source deploys — the value is not prompted for, so the entry is dropped.",
           "properties": {
             "userInput": {
               "type": "object",

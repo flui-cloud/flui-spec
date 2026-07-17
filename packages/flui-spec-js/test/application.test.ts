@@ -152,7 +152,7 @@ const LEGACY_ENV = [
 ].join('\n');
 
 describe('validate(Application) — broad spec + planned warnings', () => {
-  it('accepts planned fields (profile, scaling, valueFrom, delivery, environments) as valid', () => {
+  it('accepts planned fields (profile, scaling, valueFrom, delivery) as valid', () => {
     const r = validate(parseYaml(BROAD));
     expect(r.valid).toBe(true);
   });
@@ -165,7 +165,11 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     expect(paths).toContain('/deploy/scaling');
     expect(paths).toContain('/deploy/env/SESSION_SECRET/valueFrom');
     expect(paths).toContain('/deploy/env/PUBLIC_ID/delivery');
-    expect(paths).toContain('/environments');
+  });
+
+  it('does not warn about an environments block (applied on git-driven deploys)', () => {
+    const r = validate(parseYaml(BROAD));
+    expect(r.warnings.some((w) => w.path === '/environments')).toBe(false);
   });
 
   it('accepts and applies the legacy array env form, warning it is deprecated', () => {
@@ -201,14 +205,39 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     );
     expect(s.definitions.scaling['x-flui-status']).toBe('planned');
     const entry = s.definitions.envEntry.oneOf[1].properties;
-    expect(entry.valueFrom['x-flui-status']).toBe('planned');
     expect(entry.delivery['x-flui-status']).toBe('planned');
     expect(entry.secret['x-flui-status']).toBe('planned');
     const legacy = s.definitions.envVarLegacy.properties;
-    expect(legacy.valueFrom['x-flui-status']).toBe('planned');
     expect(legacy.secret['x-flui-status']).toBe('planned');
     expect(legacy.userEditable['x-flui-status']).toBe('planned');
-    expect(s.properties.environments['x-flui-status']).toBe('planned');
+    // environments is implemented (applied per-branch), so it carries no tag.
+    expect(s.properties.environments['x-flui-status']).toBeUndefined();
+  });
+
+  // valueFrom is partially applied: the warning fires per-branch, so the
+  // planned tag lives on the generate/userInput branches, not on the property.
+  it('tags only the still-planned valueFrom branches (generate, userInput)', () => {
+    const branches = (applicationSchema as any).definitions.valueFrom.oneOf;
+    const [generate, secretRef, service, userInput] = branches;
+    expect(generate['x-flui-status']).toBe('planned');
+    expect(userInput['x-flui-status']).toBe('planned');
+    expect(secretRef['x-flui-status']).toBeUndefined();
+    expect(service['x-flui-status']).toBeUndefined();
+  });
+
+  it('does not warn about an applied valueFrom (secretRef, service)', () => {
+    const yaml = `${VALID}
+  env:
+    DB_PASSWORD:
+      valueFrom:
+        secretRef: pg/POSTGRES_PASSWORD
+    API_URL:
+      valueFrom:
+        service: my-api
+        key: url`;
+    const r = validate(parseYaml(yaml));
+    expect(r.valid).toBe(true);
+    expect(r.warnings.some((w) => /valueFrom/.test(w.path))).toBe(false);
   });
 });
 

@@ -15,6 +15,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - JSON Schema for `kind: CatalogApp` (`schemas/catalog-app.v1beta1.json`).
 - TypeScript types and pure validator under `@flui-cloud/spec`.
 
+## [0.8.1] - 2026-07-17
+
+`valueFrom.service` and `environments` are implemented — reflecting what the
+runtime now resolves.
+
+### Changed
+
+- **`environments` is implemented** — a push (or `flui deploy`) on a branch bound
+  to an environment overlays that profile onto the base manifest: its literal
+  `env` values and the whitelisted `deploy` overrides (resources, scaling,
+  domain). `build` is never overridden, so the same image is promoted across
+  environments. Resolution is branch-scoped; a plain validate (no branch) reports
+  the base spec. The `planned` tag and the `/environments` warning are removed.
+- **`valueFrom.service` is implemented** — a `service` reference now resolves on
+  source deploys to the sibling app's in-cluster Service address
+  (`http://<slug>-svc.<namespace>.svc.cluster.local:<port>`, or `host`/`port`
+  alone). App-to-app traffic stays inside the cluster; it does not round-trip the
+  public ingress. Matched by slug within the same cluster and — when both apps are
+  assigned to one — the same project. The `planned` tag moved off the `valueFrom`
+  property onto the still-planned `generate` and `userInput` branches.
+- **Validation no longer warns about `valueFrom.secretRef` or `valueFrom.service`**
+  — both are applied. The "will be dropped" advisory now fires only for
+  `generate` / `userInput`, which the runtime still ignores.
+
+### Fixed
+
+- The `valueFrom.service` `key: url` default is documented as the in-cluster URL
+  (it was described as a public URL, which was never the resolution target).
+
 ## [0.8.0] - 2026-07-17
 
 Configuration & environments redesign for `kind: Application`. The
