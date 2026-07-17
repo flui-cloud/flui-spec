@@ -142,32 +142,76 @@ function collectApplicationWarnings(
       message: `deploy.scaling is ${NOT_APPLIED} — autoscaling is not configured from the manifest yet; the app runs at a single replica.`,
     });
   }
-  (deploy.env ?? []).forEach((e, i) => {
-    if (e.valueFrom !== undefined) {
-      warnings.push({
-        path: `/deploy/env/${i}/valueFrom`,
-        message: `env "${e.name}".valueFrom is ${NOT_APPLIED} — only env vars with a literal value are injected today; this one will be dropped.`,
-      });
+
+  const env = deploy.env;
+  if (Array.isArray(env)) {
+    warnings.push({
+      path: '/deploy/env',
+      message:
+        'the array form of deploy.env is deprecated — prefer the map form { NAME: value }. The array is still accepted and applied.',
+    });
+    env.forEach((e, i) => {
+      if (e.valueFrom !== undefined) {
+        warnings.push({
+          path: `/deploy/env/${i}/valueFrom`,
+          message: `env "${e.name}".valueFrom is ${NOT_APPLIED} — only env vars with a literal value are injected today; this one will be dropped.`,
+        });
+      }
+      if (e.secret !== undefined) {
+        warnings.push({
+          path: `/deploy/env/${i}/secret`,
+          message: `env "${e.name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
+        });
+      }
+      if (e.userEditable !== undefined) {
+        warnings.push({
+          path: `/deploy/env/${i}/userEditable`,
+          message: `env "${e.name}".userEditable is ${NOT_APPLIED} (no effect at runtime yet).`,
+        });
+      }
+      if (e.value === undefined && e.valueFrom === undefined) {
+        warnings.push({
+          path: `/deploy/env/${i}`,
+          message: `env "${e.name}" has neither value nor valueFrom — it will not be injected.`,
+        });
+      }
+    });
+  } else if (env && typeof env === 'object') {
+    for (const [name, entry] of Object.entries(env)) {
+      if (typeof entry === 'string') continue; // literal shorthand — applied today
+      if (entry.valueFrom !== undefined) {
+        warnings.push({
+          path: `/deploy/env/${name}/valueFrom`,
+          message: `env "${name}".valueFrom is ${NOT_APPLIED} — only entries with a literal value are injected today; this one will be dropped.`,
+        });
+      }
+      if (entry.secret !== undefined) {
+        warnings.push({
+          path: `/deploy/env/${name}/secret`,
+          message: `env "${name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
+        });
+      }
+      if (entry.delivery !== undefined && entry.delivery !== 'runtime') {
+        warnings.push({
+          path: `/deploy/env/${name}/delivery`,
+          message: `env "${name}".delivery: ${entry.delivery} is ${NOT_APPLIED} — every value is delivered as a runtime container env var today.`,
+        });
+      }
+      if (entry.value === undefined && entry.valueFrom === undefined) {
+        warnings.push({
+          path: `/deploy/env/${name}`,
+          message: `env "${name}" has neither value nor valueFrom — it will not be injected.`,
+        });
+      }
     }
-    if (e.secret !== undefined) {
-      warnings.push({
-        path: `/deploy/env/${i}/secret`,
-        message: `env "${e.name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
-      });
-    }
-    if (e.userEditable !== undefined) {
-      warnings.push({
-        path: `/deploy/env/${i}/userEditable`,
-        message: `env "${e.name}".userEditable is ${NOT_APPLIED} (no effect at runtime yet).`,
-      });
-    }
-    if (e.value === undefined && e.valueFrom === undefined) {
-      warnings.push({
-        path: `/deploy/env/${i}`,
-        message: `env "${e.name}" has neither value nor valueFrom — it will not be injected.`,
-      });
-    }
-  });
+  }
+
+  if (manifest.environments !== undefined) {
+    warnings.push({
+      path: '/environments',
+      message: `environments is ${NOT_APPLIED} — per-environment profiles are validated but not yet resolved; the base spec is deployed regardless of environment.`,
+    });
+  }
 
   return warnings;
 }

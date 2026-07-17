@@ -108,6 +108,9 @@ const BROAD = [
   'kind: Application',
   'metadata:',
   '  name: my-app',
+  'build:',
+  '  args:',
+  '    BUILD_MODE: production',
   'deploy:',
   '  port: 3000',
   '  resources:',
@@ -115,6 +118,30 @@ const BROAD = [
   '  scaling:',
   '    min: 1',
   '    max: 3',
+  '  env:',
+  '    NODE_ENV: production',
+  '    PUBLIC_ID:',
+  '      value: abc',
+  '      delivery: browser',
+  '    SESSION_SECRET:',
+  '      valueFrom:',
+  '        generate: secret',
+  '        length: 48',
+  'environments:',
+  '  production:',
+  '    branch: main',
+  '    env:',
+  '      PUBLIC_ID: prd',
+].join('\n');
+
+// Legacy array form of deploy.env — still accepted, warns as deprecated.
+const LEGACY_ENV = [
+  'apiVersion: flui.cloud/v1beta1',
+  'kind: Application',
+  'metadata:',
+  '  name: my-app',
+  'deploy:',
+  '  port: 3000',
   '  env:',
   '    - name: NODE_ENV',
   '      value: production',
@@ -125,25 +152,37 @@ const BROAD = [
 ].join('\n');
 
 describe('validate(Application) — broad spec + planned warnings', () => {
-  it('accepts planned fields (profile, scaling, valueFrom) as valid', () => {
+  it('accepts planned fields (profile, scaling, valueFrom, delivery, environments) as valid', () => {
     const r = validate(parseYaml(BROAD));
     expect(r.valid).toBe(true);
   });
 
-  it('warns about each planned field in use, without invalidating', () => {
+  it('warns about each planned field in use (map env), without invalidating', () => {
     const r = validate(parseYaml(BROAD));
     expect(r.valid).toBe(true);
     const paths = r.warnings.map((w) => w.path);
     expect(paths).toContain('/deploy/resources/profile');
     expect(paths).toContain('/deploy/scaling');
+    expect(paths).toContain('/deploy/env/SESSION_SECRET/valueFrom');
+    expect(paths).toContain('/deploy/env/PUBLIC_ID/delivery');
+    expect(paths).toContain('/environments');
+  });
+
+  it('accepts and applies the legacy array env form, warning it is deprecated', () => {
+    const r = validate(parseYaml(LEGACY_ENV));
+    expect(r.valid).toBe(true);
+    const paths = r.warnings.map((w) => w.path);
+    expect(paths).toContain('/deploy/env');
     expect(paths).toContain('/deploy/env/1/valueFrom');
   });
 
-  it('warns about an env var with neither value nor valueFrom', () => {
-    const yaml = `${VALID}\n  env:\n    - name: PLACEHOLDER`;
+  it('warns about a map env entry with neither value nor valueFrom', () => {
+    const yaml = `${VALID}\n  env:\n    PLACEHOLDER: {}`;
     const r = validate(parseYaml(yaml));
     expect(r.valid).toBe(true);
-    expect(r.warnings.some((w) => w.path === '/deploy/env/0')).toBe(true);
+    expect(r.warnings.some((w) => w.path === '/deploy/env/PLACEHOLDER')).toBe(
+      true,
+    );
   });
 
   it('emits no warnings for a fully-implemented manifest', () => {
@@ -157,13 +196,19 @@ describe('validate(Application) — broad spec + planned warnings', () => {
   // here fails until the warning is removed too (and vice versa).
   it('tags every warned field as x-flui-status: planned in the schema', () => {
     const s = applicationSchema as any;
-    const deploy = s.properties.deploy.properties;
-    expect(deploy.resources.properties.profile['x-flui-status']).toBe('planned');
-    expect(deploy.scaling['x-flui-status']).toBe('planned');
-    const envVar = s.definitions.envVar.properties;
-    expect(envVar.valueFrom['x-flui-status']).toBe('planned');
-    expect(envVar.secret['x-flui-status']).toBe('planned');
-    expect(envVar.userEditable['x-flui-status']).toBe('planned');
+    expect(s.definitions.resources.properties.profile['x-flui-status']).toBe(
+      'planned',
+    );
+    expect(s.definitions.scaling['x-flui-status']).toBe('planned');
+    const entry = s.definitions.envEntry.oneOf[1].properties;
+    expect(entry.valueFrom['x-flui-status']).toBe('planned');
+    expect(entry.delivery['x-flui-status']).toBe('planned');
+    expect(entry.secret['x-flui-status']).toBe('planned');
+    const legacy = s.definitions.envVarLegacy.properties;
+    expect(legacy.valueFrom['x-flui-status']).toBe('planned');
+    expect(legacy.secret['x-flui-status']).toBe('planned');
+    expect(legacy.userEditable['x-flui-status']).toBe('planned');
+    expect(s.properties.environments['x-flui-status']).toBe('planned');
   });
 });
 

@@ -15,6 +15,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - JSON Schema for `kind: CatalogApp` (`schemas/catalog-app.v1beta1.json`).
 - TypeScript types and pure validator under `@flui-cloud/spec`.
 
+## [0.8.0] - 2026-07-17
+
+Configuration & environments redesign for `kind: Application`. The
+`apiVersion` stays `flui.cloud/v1beta1`: every 0.7.0 manifest keeps validating,
+so the bump is additive at the wire level even though the recommended shape
+changes.
+
+### Added
+
+- **`deploy.env` map form** — `deploy.env` now accepts a map
+  `{ ENV_NAME: <value | spec> }`, where a bare string is shorthand for
+  `{ value: … }`. This is the preferred form; it removes the merge-key ambiguity
+  of the list form and reads as one config matrix in a diff.
+- **`deploy.env[].delivery`** (`runtime` | `browser` | `build`) — declares how a
+  value reaches the app: a container env var (server-side), rendered to
+  `/flui-env.js` for static/SPA builds, or a Docker build ARG. `planned`.
+- **`build.args`** — Docker build ARGs (`--build-arg`), env-independent and baked
+  into the image. Implemented (the build already reads them); previously the
+  schema rejected the field.
+- **`valueFrom.service`** — reference another Flui app in the same project;
+  resolved to its endpoint in the current environment's scope. `planned`.
+- **`environments`** (top-level) — named per-environment profiles with a `branch`
+  binding, a whitelisted `deploy` override (no `build` → artifact promotion is
+  preserved) and literal-only `env` overrides. `planned`.
+
+### Changed
+
+- The **array form of `deploy.env` is deprecated** (still accepted and applied
+  unchanged; validation emits a deprecation warning). Migrate to the map form.
+
 ## [0.7.0] - 2026-07-10
 
 ### Added

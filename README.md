@@ -52,8 +52,7 @@ metadata:
 deploy:
   port: 3000
   env:
-    - name: NODE_ENV
-      value: production
+    NODE_ENV: production
 ```
 
 ## Quickstart
