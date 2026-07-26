@@ -73,6 +73,7 @@ export interface CatalogSpecStandalone {
   privatizable?: boolean;
   domain?: CatalogDomainSpec;
   auth?: CatalogAuth;
+  access?: CatalogAccess;
   postInstall?: CatalogPostInstallStep[];
   startCommand?: string;
   linkedBuildingBlocks?: CatalogLinkedBuildingBlock[];
@@ -104,6 +105,7 @@ export interface CatalogSpecBuildingBlock {
   healthcheck: CatalogHealthcheck;
   startCommand?: string;
   auth?: CatalogAuth;
+  access?: CatalogAccess;
   postInstall?: CatalogPostInstallStep[];
   smokeTest?: CatalogSmokeTest;
   dependencies?: CatalogDependency[];
@@ -115,6 +117,7 @@ export interface CatalogSpecComposed {
   networking?: CatalogComposedNetworking;
   domain?: CatalogDomainSpec;
   auth?: CatalogAuth;
+  access?: CatalogAccess;
   /** Install-time feature toggles; gate components & postInstall via `when.option`. */
   options?: CatalogOption[];
   postInstall?: CatalogPostInstallStep[];
@@ -164,6 +167,37 @@ export interface CatalogAuthOidc {
 
 export interface CatalogAuthProxy {
   headerMapping?: Record<string, string>;
+}
+
+/**
+ * How a user logs into the app after install. Orthogonal to `auth` (which is
+ * *how* authentication works): `access` is *what to hand the user* — the login
+ * URL and the admin credentials, wherever they come from (a value the user set,
+ * a secret generated on the host, or a default baked into the image).
+ */
+export type CatalogAccessMode = 'credentials' | 'firstVisit' | 'none';
+
+export interface CatalogAccess {
+  /** Defaults to 'credentials' when the block is present. `firstVisit`: no
+   * account exists until the first visitor claims it (e.g. WordPress installer,
+   * Immich native sign-up). `none`: nothing to hand the user. */
+  mode?: CatalogAccessMode;
+  /** Login path under the app URL. Falls back to `metadata.entrypointPath`, then `/`. */
+  path?: string;
+  username?: CatalogAccessValue;
+  password?: CatalogAccessValue;
+  /** Shown with the credentials, e.g. "Change this after first login." */
+  note?: string;
+}
+
+/** One credential part: an env reference (userInput/generate/default) or a fixed value. */
+export interface CatalogAccessValue {
+  /** Env var name whose runtime value is the credential (read back on reveal). */
+  fromEnv?: string;
+  /** Composed apps: the component declaring that env (default: the primary/exposed one). */
+  component?: string;
+  /** Value baked into the image (a fixed default, e.g. `umami`/`umami`). */
+  value?: string;
 }
 
 export interface CatalogPostInstallStep {
@@ -254,6 +288,22 @@ export interface CatalogPort {
   internal: number;
   expose: boolean;
   protocol?: 'http' | 'tcp';
+  /**
+   * How this HTTP port is published through the app's ingress hostname. Absent =
+   * the primary component's first HTTP port becomes the root (`/`); a secondary
+   * component's port needs an explicit `route` to be fronted (e.g. an API at
+   * `/api` alongside the web UI). Ignored for non-HTTP ports.
+   */
+  route?: CatalogPortRoute;
+}
+
+export interface CatalogPortRoute {
+  /** Path prefix under the app hostname, e.g. `/api`. Omitted or `/` = root. */
+  path?: string;
+  /** Reserved: a dedicated subdomain instead of a path prefix (not yet supported). */
+  subdomain?: string;
+  /** Strip the path prefix before proxying to the backend (default false). */
+  stripPrefix?: boolean;
 }
 
 export interface CatalogVolume {
@@ -295,6 +345,20 @@ export interface CatalogUserInputPrompt {
   label?: string;
   default?: string;
   sensitive?: boolean;
+  /**
+   * Whether the installer must collect a value. Independent of `sensitive`
+   * (which only controls Secret vs plaintext storage). Defaults to `sensitive`:
+   * a sensitive input is required unless this is explicitly `false`. Set `false`
+   * on a sensitive input to make it optional, or `true` on a non-sensitive one
+   * to require it.
+   */
+  required?: boolean;
+  /**
+   * Inputs sharing a group id form an "at least one of" set: each member is
+   * individually optional, but the installer must collect a value for at least
+   * one member of the group. Mutually exclusive with `required`/`default`.
+   */
+  group?: string;
   placeholder?: string;
   pattern?: string;
   patternDescription?: string;

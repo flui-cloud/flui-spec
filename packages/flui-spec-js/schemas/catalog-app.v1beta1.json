@@ -239,6 +239,9 @@
         "auth": {
           "$ref": "#/definitions/auth"
         },
+        "access": {
+          "$ref": "#/definitions/access"
+        },
         "postInstall": {
           "$ref": "#/definitions/postInstall"
         },
@@ -315,6 +318,9 @@
         "auth": {
           "$ref": "#/definitions/auth"
         },
+        "access": {
+          "$ref": "#/definitions/access"
+        },
         "postInstall": {
           "$ref": "#/definitions/postInstall"
         },
@@ -360,6 +366,9 @@
         },
         "auth": {
           "$ref": "#/definitions/auth"
+        },
+        "access": {
+          "$ref": "#/definitions/access"
         },
         "postInstall": {
           "$ref": "#/definitions/postInstall"
@@ -689,6 +698,12 @@
             "userInput": {
               "type": "object",
               "additionalProperties": false,
+              "allOf": [
+                {
+                  "if": { "required": ["group"] },
+                  "then": { "properties": { "required": false, "default": false } }
+                }
+              ],
               "properties": {
                 "label": {
                   "type": "string"
@@ -698,6 +713,15 @@
                 },
                 "sensitive": {
                   "type": "boolean"
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "Whether the installer must collect a value for this input. Independent of `sensitive` (which only controls whether the value is stored encrypted as a Secret vs a plaintext env). Defaults to the value of `sensitive`: a sensitive input is required unless this is explicitly `false`. Set `false` on a sensitive input to make it optional (unset → the env is not injected), or `true` on a non-sensitive input to require it."
+                },
+                "group": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                  "description": "Inputs sharing a group id form an 'at least one of' set: each member is individually optional, but the installer must collect a value for AT LEAST ONE member of the group (e.g. four LLM-provider keys where any one works). A group needs ≥2 members to be meaningful. Mutually exclusive with `required` and `default` (a group governs presence collectively, so an individual `required`/`default` would be contradictory)."
                 },
                 "placeholder": {
                   "type": "string"
@@ -1175,6 +1199,46 @@
         },
         "reuseExisting": {
           "type": "boolean"
+        }
+      }
+    },
+    "access": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "credentials",
+            "firstVisit",
+            "none"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "username": {
+          "$ref": "#/definitions/accessValue"
+        },
+        "password": {
+          "$ref": "#/definitions/accessValue"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "accessValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fromEnv": {
+          "type": "string"
+        },
+        "component": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
         }
       }
     },
