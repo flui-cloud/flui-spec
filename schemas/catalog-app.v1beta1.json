@@ -959,6 +959,11 @@
         "certificateProvider": {
           "type": "string",
           "enum": ["lets-encrypt", "lets-encrypt-staging"]
+        },
+        "httpsRequirement": {
+          "type": "string",
+          "enum": ["required", "recommended", "none"],
+          "description": "What the APPLICATION needs, as opposed to `tls`, which is what the operator requests. Some applications cannot work over plain HTTP at all — an unconditional HTTP→HTTPS redirect, `Secure` cookies, HSTS, a service worker, WebAuthn, Web Crypto, an OAuth callback registered as https. `required`: a deploy that would not be reachable over HTTPS (TLS off, or no domain at all) is refused, naming this field. `recommended`: the same deploy is warned about by name and proceeds. `none`, and an absent field, mean silence."
         }
       }
     },

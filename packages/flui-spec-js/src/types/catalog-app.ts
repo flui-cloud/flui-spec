@@ -1,4 +1,13 @@
 import type { FluiApiVersion } from './api-version';
+import type {
+  FluiHealthcheck,
+  FluiHttpsRequirement,
+  FluiSmokeTest,
+  FluiSmokeTestHttp,
+  FluiSmokeTestScript,
+  FluiSmokeTestSkip,
+  FluiSmokeTestTcp,
+} from './shared';
 import {
   ApplicationKind,
   CatalogAppType,
@@ -95,6 +104,8 @@ export interface CatalogLinkedEnv {
 
 export interface CatalogSpecBuildingBlock {
   type: CatalogAppType.BUILDING_BLOCK;
+  /** How a client reaches this block — declared once here, not restated per client. */
+  connection?: { url: string };
   image: CatalogImageSource;
   ports: CatalogPort[];
   volumes?: CatalogVolume[];
@@ -240,6 +251,12 @@ export interface CatalogComponent {
   scaling: CatalogScaling;
   healthcheck?: CatalogHealthcheck;
   dependsOn?: string[];
+  /**
+   * Overrides the image CMD (run as `sh -c`). Use it to make a component
+   * self-initializing: run idempotent setup (migrations, config) and `exec`
+   * the image's original command, so every boot converges to a ready state.
+   */
+  startCommand?: string;
   /** Component is created only if the gate matches (e.g. an optional feature). */
   when?: {
     /** Created only if this install-time option (spec.options[].key) is enabled. */
@@ -287,7 +304,12 @@ export interface CatalogPort {
   name: string;
   internal: number;
   expose: boolean;
-  protocol?: 'http' | 'tcp';
+  /**
+   * `https`: the container speaks TLS itself (usually self-signed) and cannot be
+   * served plain HTTP — the ingress proxies to it over TLS without verifying the
+   * upstream certificate. Routing-wise it behaves like `http`.
+   */
+  protocol?: 'http' | 'https' | 'tcp';
   /**
    * How this HTTP port is published through the app's ingress hostname. Absent =
    * the primary component's first HTTP port becomes the root (`/`); a secondary
@@ -433,22 +455,8 @@ export interface CatalogVpaUpdatePolicy {
   cooldown?: string;
 }
 
-export interface CatalogHealthcheck {
-  type: 'http' | 'tcp' | 'exec';
-  path?: string;
-  port?: number;
-  command?: string[];
-  /**
-   * Extra HTTP request headers for the probe (http type only). Use to send a
-   * trusted `Host` (e.g. localhost) to apps that reject unknown Hosts on their
-   * health path — the kubelet otherwise sends the pod IP, which such apps 400.
-   */
-  httpHeaders?: Record<string, string>;
-  initialDelay?: string;
-  interval?: string;
-  timeout?: string;
-  retries?: number;
-}
+/** Shared with `kind: Application` — see `FluiHealthcheck`. */
+export type CatalogHealthcheck = FluiHealthcheck;
 
 export interface CatalogDomainSpec {
   auto?: boolean;
@@ -457,6 +465,7 @@ export interface CatalogDomainSpec {
   hostnameMode?: 'ip' | 'domain';
   certChallenge?: 'http-01' | 'dns-01';
   certificateProvider?: 'lets-encrypt' | 'lets-encrypt-staging';
+  httpsRequirement?: FluiHttpsRequirement;
 }
 
 export interface CatalogDependency {
@@ -466,35 +475,9 @@ export interface CatalogDependency {
   reuseExisting?: boolean;
 }
 
-export interface CatalogSmokeTestHttp {
-  type: 'http';
-  path?: string;
-  expectedStatus?: number;
-  timeoutSeconds?: number;
-  retries?: number;
-}
-
-export interface CatalogSmokeTestTcp {
-  type: 'tcp';
-  port?: number;
-  timeoutSeconds?: number;
-}
-
-export interface CatalogSmokeTestScript {
-  type: 'script';
-  inline?: string;
-  file?: string;
-  shell?: string;
-  timeoutSeconds?: number;
-}
-
-export interface CatalogSmokeTestSkip {
-  type: 'skip';
-  reason?: string;
-}
-
-export type CatalogSmokeTest =
-  | CatalogSmokeTestHttp
-  | CatalogSmokeTestTcp
-  | CatalogSmokeTestScript
-  | CatalogSmokeTestSkip;
+/** Shared with `kind: Application` — see `FluiSmokeTest`. */
+export type CatalogSmokeTestHttp = FluiSmokeTestHttp;
+export type CatalogSmokeTestTcp = FluiSmokeTestTcp;
+export type CatalogSmokeTestScript = FluiSmokeTestScript;
+export type CatalogSmokeTestSkip = FluiSmokeTestSkip;
+export type CatalogSmokeTest = FluiSmokeTest;

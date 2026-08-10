@@ -161,7 +161,7 @@
         },
         "draft": {
           "type": "boolean",
-          "description": "When true, the manifest is seeded but kept unpublished \u2014 it does not appear in GET /catalog and cannot be installed by end users. Use for work-in-progress entries kept in the repo."
+          "description": "When true, the manifest is seeded but kept unpublished — it does not appear in GET /catalog and cannot be installed by end users. Use for work-in-progress entries kept in the repo."
         }
       }
     },
@@ -281,6 +281,20 @@
       "properties": {
         "type": {
           "const": "building-block"
+        },
+        "connection": {
+          "type": "object",
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false,
+          "description": "How a client reaches this block. Declared once here so no client manifest has to restate a DSN it could get wrong.",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "Connection URL template. `{{host}}` and `{{port}}` are the block's address, `{{env.NAME}}` one of its own env values — a secret one is resolved where the secret lives, never in a manifest or a plan."
+            }
+          }
         },
         "image": {
           "$ref": "#/definitions/image"
@@ -464,6 +478,10 @@
             "type": "string"
           }
         },
+        "startCommand": {
+          "type": "string",
+          "description": "Overrides the image CMD (run as `sh -c`). Use for self-initializing components: run idempotent setup (migrations, config) then `exec` the image's original command, so every boot converges to a ready state and a failed init fails the unit instead of serving a broken app."
+        },
         "when": {
           "type": "object",
           "additionalProperties": false,
@@ -556,8 +574,10 @@
         "protocol": {
           "enum": [
             "http",
+            "https",
             "tcp"
-          ]
+          ],
+          "description": "http: plain web port, routable by the ingress. https: the container terminates TLS itself (usually self-signed) and refuses or redirects plain HTTP — the ingress proxies to it over TLS without verifying the upstream certificate; use this when the image forces HTTPS internally (symptom on http: an unconditional 301 redirect loop behind the ingress). tcp: non-web port, never ingress-routed."
         }
       }
     },
@@ -700,8 +720,17 @@
               "additionalProperties": false,
               "allOf": [
                 {
-                  "if": { "required": ["group"] },
-                  "then": { "properties": { "required": false, "default": false } }
+                  "if": {
+                    "required": [
+                      "group"
+                    ]
+                  },
+                  "then": {
+                    "properties": {
+                      "required": false,
+                      "default": false
+                    }
+                  }
                 }
               ],
               "properties": {
@@ -985,52 +1014,109 @@
     },
     "healthcheck": {
       "type": "object",
-      "required": [
-        "type"
-      ],
       "additionalProperties": false,
+      "description": "Container health probe. It is run by the runtime, not by the image: the deploy learns from it whether the application actually came up, and `application.status` reports what it answered. This definition is shared field for field with the other manifest kind — a parity test keeps the two deep-equal, so a probe written for one kind is valid on the other.",
       "properties": {
         "type": {
+          "type": "string",
           "enum": [
             "http",
             "tcp",
             "exec"
-          ]
+          ],
+          "default": "http",
+          "description": "Probe kind. Omitting it means http, so a manifest that declares only `path` is complete."
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^/",
+          "description": "HTTP path probed for readiness/liveness. MUST be a real route that returns 2xx — a wrong path (e.g. /health when the route is /api/health) makes every probe fail silently. Required for an http probe."
         },
         "port": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 65535
+          "maximum": 65535,
+          "description": "Port the probe connects to inside the container. Defaults to the container's exposed port (`deploy.port` for an Application)."
         },
         "command": {
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Argv of an `exec` probe, run inside the container. Required when type is exec. Use it when the app ships its own check and no HTTP route answers before it is ready."
         },
         "initialDelay": {
-          "type": "string"
+          "type": "string",
+          "description": "Grace period before the first probe, as a duration (`30s`, `2m`). An application that migrates a database on first boot needs one; without it the first probe fails on a container that is merely still starting."
         },
         "interval": {
-          "type": "string"
+          "type": "string",
+          "description": "Time between probes, as a duration (`10s`, `1m`)."
         },
         "timeout": {
-          "type": "string"
+          "type": "string",
+          "description": "How long one probe may take before it counts as failed, as a duration (`3s`)."
         },
         "retries": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "Consecutive failures before the container is reported unhealthy."
         },
         "httpHeaders": {
           "type": "object",
           "additionalProperties": {
             "type": "string"
+          },
+          "description": "Extra request headers for an http probe — a `Host` the framework trusts, or a header a protected route requires. Without it the probe arrives as a bare loopback request, which a Host-validating framework rejects."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "not": {
+                  "required": [
+                    "type"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "http"
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "exec"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "command"
+            ]
           }
         }
-      }
+      ]
     },
     "exposure": {
       "type": "string",
@@ -1056,15 +1142,33 @@
         },
         "hostnameMode": {
           "type": "string",
-          "enum": ["ip", "domain"]
+          "enum": [
+            "ip",
+            "domain"
+          ]
         },
         "certChallenge": {
           "type": "string",
-          "enum": ["http-01", "dns-01"]
+          "enum": [
+            "http-01",
+            "dns-01"
+          ]
         },
         "certificateProvider": {
           "type": "string",
-          "enum": ["lets-encrypt", "lets-encrypt-staging"]
+          "enum": [
+            "lets-encrypt",
+            "lets-encrypt-staging"
+          ]
+        },
+        "httpsRequirement": {
+          "type": "string",
+          "enum": [
+            "required",
+            "recommended",
+            "none"
+          ],
+          "description": "What the APPLICATION needs, as opposed to `tls`, which is what the operator requests. Some applications cannot work over plain HTTP at all — an unconditional HTTP→HTTPS redirect, `Secure` cookies, HSTS, a service worker, WebAuthn, Web Crypto, an OAuth callback registered as https. `required`: a deploy that would not be reachable over HTTPS (TLS off, or no domain at all) is refused, naming this field. `recommended`: the same deploy is warned about by name and proceeds. `none`, and an absent field, mean silence."
         }
       }
     },
@@ -1075,7 +1179,7 @@
         "envMapping"
       ],
       "additionalProperties": false,
-      "description": "Declares this standalone app is a client/UI for a building block (e.g. pgweb \u2192 postgresql). At runtime, the user connects the client to a running BB install via POST /catalog/installs/:id/connect with body { targetInstallId }. The backend wires the env vars below with `secretKeyRef` to the BB's existing K8s Secret (passwords never leave the cluster) and literal values for non-secret sources (host, port, db name). Connection is mutable: the same client can be disconnected or switched to another BB without reinstalling.",
+      "description": "Declares this standalone app is a client/UI for a building block (e.g. pgweb → postgresql). At runtime, the user connects the client to a running BB install via POST /catalog/installs/:id/connect with body { targetInstallId }. The backend wires the env vars below with `secretKeyRef` to the BB's existing K8s Secret (passwords never leave the cluster) and literal values for non-secret sources (host, port, db name). Connection is mutable: the same client can be disconnected or switched to another BB without reinstalling.",
       "properties": {
         "ref": {
           "type": "string",
@@ -1107,7 +1211,7 @@
             "host",
             "port"
           ],
-          "description": "Compute from the BB's Kubernetes Service: 'host' \u2192 cluster DNS, 'port' \u2192 first port's internal number."
+          "description": "Compute from the BB's Kubernetes Service: 'host' → cluster DNS, 'port' → first port's internal number."
         },
         "fromBBEnv": {
           "type": "string",
@@ -1457,6 +1561,7 @@
         "type"
       ],
       "additionalProperties": false,
+      "description": "The post-deploy gate: the one check that decides whether the deploy is kept or rolled back. Distinct from `healthcheck`, which runs inside the container forever — this runs once, from the host, after the units are up. This definition is shared field for field with the other manifest kind, kept deep-equal by a parity test. A client that cannot run the kind declared here must say so; substituting a weaker check and reporting success is a defect, not a fallback.",
       "properties": {
         "type": {
           "type": "string",
@@ -1465,40 +1570,50 @@
             "tcp",
             "script",
             "skip"
-          ]
+          ],
+          "description": "http requests `path` and compares the status; tcp connects to the published port; script runs `inline` (or `file`/`shell`); skip declares that no gate is possible and says why."
         },
         "reason": {
-          "type": "string"
+          "type": "string",
+          "description": "Why there is no gate. Only meaningful with type: skip, where it is what a reader gets instead of a check."
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "Path requested by an http gate. Defaults to `/`."
         },
         "expectedStatus": {
           "type": "integer",
           "minimum": 100,
-          "maximum": 599
+          "maximum": 599,
+          "description": "Status an http gate treats as success. Declare it for an app whose root answers 302 or 401 when healthy, or the deploy rolls back an application that is serving correctly."
         },
         "port": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 65535
+          "maximum": 65535,
+          "description": "Container port a tcp gate connects to. Defaults to the primary published port."
         },
         "inline": {
-          "type": "string"
+          "type": "string",
+          "description": "Shell commands run as the gate, for a service that answers on a protocol rather than on HTTP (a database round-trip). Requires type: script."
         },
         "file": {
-          "type": "string"
+          "type": "string",
+          "description": "Path to a script run as the gate, instead of `inline`."
         },
         "shell": {
-          "type": "string"
+          "type": "string",
+          "description": "Interpreter for `inline`/`file`. Defaults to the image's `sh`."
         },
         "timeoutSeconds": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "How long the application has to answer for the FIRST time. This is a startup budget, not a request timeout: a cold host pulling an image and running migrations is nothing like the warm local runtime a manifest was written against, and too small a value rolls back an application that is merely slow."
         },
         "retries": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Probe attempts. Attempts times the client's fixed spacing is a second way of expressing the same startup budget; the larger of the two wins."
         }
       }
     }
