@@ -107,6 +107,10 @@ function validateApplicationManifest(
     return failed(formatAjvErrors(validateApplication.errors ?? []));
   }
   const manifest = parsed as ApplicationManifest;
+  const semantic = runApplicationSemanticChecks(manifest);
+  if (semantic.length > 0) {
+    return failed(semantic);
+  }
   return {
     valid: true,
     manifest,
@@ -130,11 +134,6 @@ function collectApplicationWarnings(
 
   const NOT_APPLIED = 'accepted by the spec but not yet applied on source deploys';
 
-  // secretRef and service resolve on source deploys today; only generate and
-  // userInput remain planned. Warn about the latter two, not any valueFrom.
-  const plannedValueFrom = (vf: { generate?: unknown; userInput?: unknown } | undefined) =>
-    vf != null && (vf.generate !== undefined || vf.userInput !== undefined);
-
   if (deploy.resources?.profile !== undefined) {
     warnings.push({
       path: '/deploy/resources/profile',
@@ -150,68 +149,71 @@ function collectApplicationWarnings(
 
   const env = deploy.env;
   if (Array.isArray(env)) {
-    warnings.push({
-      path: '/deploy/env',
-      message:
-        'the array form of deploy.env is deprecated — prefer the map form { NAME: value }. The array is still accepted and applied.',
-    });
-    env.forEach((e, i) => {
-      if (plannedValueFrom(e.valueFrom)) {
-        warnings.push({
-          path: `/deploy/env/${i}/valueFrom`,
-          message: `env "${e.name}".valueFrom (generate/userInput) is ${NOT_APPLIED} — secretRef and service resolve, but a generated or prompted value is dropped.`,
-        });
-      }
-      if (e.secret !== undefined) {
-        warnings.push({
-          path: `/deploy/env/${i}/secret`,
-          message: `env "${e.name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
-        });
-      }
-      if (e.userEditable !== undefined) {
-        warnings.push({
-          path: `/deploy/env/${i}/userEditable`,
-          message: `env "${e.name}".userEditable is ${NOT_APPLIED} (no effect at runtime yet).`,
-        });
-      }
-      if (e.value === undefined && e.valueFrom === undefined) {
-        warnings.push({
-          path: `/deploy/env/${i}`,
-          message: `env "${e.name}" has neither value nor valueFrom — it will not be injected.`,
-        });
-      }
-    });
+    warnings.push(...legacyEnvWarnings(env, NOT_APPLIED));
   } else if (env && typeof env === 'object') {
-    for (const [name, entry] of Object.entries(env)) {
-      if (typeof entry === 'string') continue; // literal shorthand — applied today
-      if (plannedValueFrom(entry.valueFrom)) {
-        warnings.push({
-          path: `/deploy/env/${name}/valueFrom`,
-          message: `env "${name}".valueFrom (generate/userInput) is ${NOT_APPLIED} — secretRef and service resolve, but a generated or prompted value is dropped.`,
-        });
-      }
-      if (entry.secret !== undefined) {
-        warnings.push({
-          path: `/deploy/env/${name}/secret`,
-          message: `env "${name}".secret is ${NOT_APPLIED} (no effect at runtime yet).`,
-        });
-      }
-      if (entry.delivery !== undefined && entry.delivery !== 'runtime') {
-        warnings.push({
-          path: `/deploy/env/${name}/delivery`,
-          message: `env "${name}".delivery: ${entry.delivery} is ${NOT_APPLIED} — every value is delivered as a runtime container env var today.`,
-        });
-      }
-      if (entry.value === undefined && entry.valueFrom === undefined) {
-        warnings.push({
-          path: `/deploy/env/${name}`,
-          message: `env "${name}" has neither value nor valueFrom — it will not be injected.`,
-        });
-      }
-    }
+    warnings.push(...mapEnvWarnings(env, NOT_APPLIED));
   }
 
   return warnings;
+}
+
+type LegacyEnv = Extract<NonNullable<NonNullable<ApplicationManifest['deploy']>['env']>, unknown[]>;
+type MapEnv = Exclude<NonNullable<NonNullable<ApplicationManifest['deploy']>['env']>, unknown[]>;
+
+function legacyEnvWarnings(env: LegacyEnv, notApplied: string): FluiValidationWarning[] {
+  return [
+    {
+      path: '/deploy/env',
+      message:
+        'the array form of deploy.env is deprecated — prefer the map form { NAME: value }. The array is still accepted and applied.',
+    },
+    ...env.flatMap((e, i) => [
+      ...(e.userEditable === undefined
+        ? []
+        : [{ path: `/deploy/env/${i}/userEditable`, message: `env "${e.name}".userEditable is ${notApplied} (no effect at runtime yet).` }]),
+      ...(e.value === undefined && e.valueFrom === undefined
+        ? [{ path: `/deploy/env/${i}`, message: `env "${e.name}" has neither value nor valueFrom — it will not be injected.` }]
+        : []),
+    ]),
+  ];
+}
+
+function mapEnvWarnings(env: MapEnv, notApplied: string): FluiValidationWarning[] {
+  return Object.entries(env).flatMap(([name, entry]) => {
+    if (typeof entry === 'string') return []; // literal shorthand — applied today
+    return [
+      // `runtime` is the default and is applied; `build` is refused as an error, not warned about.
+      ...(entry.delivery === 'browser'
+        ? [{ path: `/deploy/env/${name}/delivery`, message: `env "${name}".delivery: browser is ${notApplied} — the value is delivered as a runtime container env var instead. vOps does apply it, rendering the value into deploy.browserConfig.path.` }]
+        : []),
+      ...(entry.value === undefined && entry.valueFrom === undefined
+        ? [{ path: `/deploy/env/${name}`, message: `env "${name}" has neither value nor valueFrom — it will not be injected.` }]
+        : []),
+    ];
+  });
+}
+
+/**
+ * The one thing a manifest may declare that is refused rather than warned about.
+ *
+ * A build argument is baked into the image, so it is invariant across environments by
+ * construction; under `deploy.env` it would look like a runtime value that can vary per
+ * environment, and nothing in this block could make that true. Warning about it would let a
+ * caller believe a value reached the build when it never did.
+ */
+function runApplicationSemanticChecks(
+  manifest: ApplicationManifest,
+): FluiValidationError[] {
+  const env = manifest.deploy?.env;
+  if (!env || Array.isArray(env)) return [];
+  return Object.entries(env).flatMap(([name, entry]) =>
+    typeof entry !== 'string' && entry.delivery === 'build'
+      ? [{
+          path: `/deploy/env/${name}/delivery`,
+          message: `env "${name}" uses delivery: build. A build argument is baked into the image and cannot vary by environment, so it belongs in build.args — declare it as build.args.${name} and remove it from deploy.env.`,
+        }]
+      : [],
+  );
 }
 
 function runCatalogSemanticChecks(

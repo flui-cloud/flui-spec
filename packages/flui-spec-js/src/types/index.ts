@@ -1,4 +1,5 @@
 export * from './api-version';
+export * from './shared';
 export * from './enums';
 export * from './catalog-app';
 export * from './application';

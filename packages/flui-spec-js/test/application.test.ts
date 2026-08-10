@@ -163,7 +163,6 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     const paths = r.warnings.map((w) => w.path);
     expect(paths).toContain('/deploy/resources/profile');
     expect(paths).toContain('/deploy/scaling');
-    expect(paths).toContain('/deploy/env/SESSION_SECRET/valueFrom');
     expect(paths).toContain('/deploy/env/PUBLIC_ID/delivery');
   });
 
@@ -177,7 +176,6 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     expect(r.valid).toBe(true);
     const paths = r.warnings.map((w) => w.path);
     expect(paths).toContain('/deploy/env');
-    expect(paths).toContain('/deploy/env/1/valueFrom');
   });
 
   it('warns about a map env entry with neither value nor valueFrom', () => {
@@ -206,26 +204,54 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     expect(s.definitions.scaling['x-flui-status']).toBe('planned');
     const entry = s.definitions.envEntry.oneOf[1].properties;
     expect(entry.delivery['x-flui-status']).toBe('planned');
-    expect(entry.secret['x-flui-status']).toBe('planned');
-    const legacy = s.definitions.envVarLegacy.properties;
-    expect(legacy.secret['x-flui-status']).toBe('planned');
-    expect(legacy.userEditable['x-flui-status']).toBe('planned');
+    expect(s.definitions.envVarLegacy.properties.userEditable['x-flui-status']).toBe('planned');
     // environments is implemented (applied per-branch), so it carries no tag.
     expect(s.properties.environments['x-flui-status']).toBeUndefined();
   });
 
-  // valueFrom is partially applied: the warning fires per-branch, so the
-  // planned tag lives on the generate/userInput branches, not on the property.
-  it('tags only the still-planned valueFrom branches (generate, userInput)', () => {
-    const branches = (applicationSchema as any).definitions.valueFrom.oneOf;
-    const [generate, secretRef, service, userInput] = branches;
-    expect(generate['x-flui-status']).toBe('planned');
-    expect(userInput['x-flui-status']).toBe('planned');
-    expect(secretRef['x-flui-status']).toBeUndefined();
-    expect(service['x-flui-status']).toBeUndefined();
+  /**
+   * A wrong `planned` tag on `secret` is worse than no tag at all: a tool reading the schema to
+   * decide what it must collect concludes the runtime discards secrets, and then either refuses to
+   * deploy or writes the value in clear. The resolved value becomes a host secret injected by
+   * reference, so neither env form may carry the tag.
+   */
+  it('leaves secret untagged on both env forms', () => {
+    const s = applicationSchema as any;
+    expect(s.definitions.envEntry.oneOf[1].properties.secret['x-flui-status']).toBeUndefined();
+    expect(s.definitions.envVarLegacy.properties.secret['x-flui-status']).toBeUndefined();
+    for (const note of JSON.stringify(s).match(/"x-flui-note":"[^"]*"/g) ?? []) {
+      expect(note).not.toMatch(/generate and userInput are planned/);
+      expect(note).not.toMatch(/injected as a plain env entry regardless/);
+    }
   });
 
-  it('does not warn about an applied valueFrom (secretRef, service)', () => {
+  it('emits no warning for a secret declared on either env form', () => {
+    const map = validate(parseYaml(`${VALID}\n  env:\n    TOKEN:\n      value: t\n      secret: true`));
+    expect(map.valid).toBe(true);
+    expect(map.warnings.some((w) => /secret/.test(w.path))).toBe(false);
+    const legacy = validate(parseYaml(`${VALID}\n  env:\n    - name: TOKEN\n      value: t\n      secret: true`));
+    expect(legacy.valid).toBe(true);
+    expect(legacy.warnings.some((w) => /secret/.test(w.path))).toBe(false);
+  });
+
+  /** The one refusal: a build argument is baked into the image, so it cannot vary by
+   * environment — and `deploy.env` is the block whose whole purpose is that it can. */
+  it('refuses delivery: build and says where the value belongs', () => {
+    const r = validate(parseYaml(`${VALID}\n  env:\n    NEXT_PUBLIC_URL:\n      value: https://x\n      delivery: build`));
+    expect(r.valid).toBe(false);
+    expect(r.errors[0].path).toBe('/deploy/env/NEXT_PUBLIC_URL/delivery');
+    expect(r.errors[0].message).toContain('build.args.NEXT_PUBLIC_URL');
+  });
+
+  // Every valueFrom branch is applied on a source deploy: generate creates the
+  // secret on the host and a sensitive userInput becomes one the deployer supplies,
+  // so no branch carries a planned tag and none warns.
+  it('tags no valueFrom branch as planned', () => {
+    const branches = (applicationSchema as any).definitions.valueFrom.oneOf;
+    for (const branch of branches) expect(branch['x-flui-status']).toBeUndefined();
+  });
+
+  it('does not warn about an applied valueFrom', () => {
     const yaml = `${VALID}
   env:
     DB_PASSWORD:
