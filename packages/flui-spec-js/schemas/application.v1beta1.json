@@ -32,7 +32,8 @@
         "strategy": {
           "enum": ["dockerfile", "auto"],
           "default": "dockerfile",
-          "description": "`dockerfile` builds the repo Dockerfile. `auto` lets railpack detect the framework."
+          "description": "`dockerfile` builds the repo Dockerfile. `auto` lets railpack detect the framework.",
+          "x-flui-note": "`dockerfile` is applied everywhere. `auto` is per-runtime: a single-node vOps deploy REFUSES it with an error rather than accepting it, because the CI workflow it writes is hardcoded to a Dockerfile — accepting the value would fail in CI minutes later, on a repository the author owns."
         },
         "dockerfile": {
           "type": "string",
@@ -59,19 +60,20 @@
     },
     "deploy": {
       "type": "object",
-      "required": ["port"],
       "additionalProperties": false,
+      "allOf": [{ "$ref": "#/definitions/exposureRules" }],
       "properties": {
         "port": {
           "type": "integer",
           "minimum": 1,
           "maximum": 65535,
-          "description": "The port your app listens on inside the container. MUST match what your code binds (commonly process.env.PORT)."
+          "description": "The port your app listens on inside the container. MUST match what your code binds (commonly process.env.PORT). Required unless `exposure: none` — see `deploy.exposure`."
         },
         "exposure": {
-          "enum": ["public", "internal"],
+          "enum": ["public", "internal", "none"],
           "default": "public",
-          "description": "`public` = Ingress + TLS + DNS on a public hostname. `internal` = ClusterIP only, reachable via the dashboard proxy."
+          "description": "How the workload is reached. `public` = Ingress + TLS + DNS on a public hostname. `internal` = ClusterIP only, reachable via the dashboard proxy. `none` = the workload does not listen: no port, no Service, no endpoint — a worker, a queue consumer. `none` is DECLARED, never inferred: a manifest that simply forgot `deploy.port` is refused rather than deployed as a worker, because inferring one from the other turns a typo into a silently unreachable application. `none` does NOT cover a scheduled job: a cron deployed as a long-running workload restarts in a loop and reports healthy while doing nothing of the kind — the spec has no field for a schedule yet, and this one must not be read as one.",
+          "x-flui-note": "The default is carried here and nowhere else. A runtime that fills it in must read `properties.deploy.properties.exposure.default` from this schema (the package exports it as `APPLICATION_EXPOSURE_DEFAULT`) rather than writing the literal again — a second copy of a default is a second place for it to drift, and this one decides whether an application is reachable."
         },
         "healthcheck": {
           "$ref": "#/definitions/healthcheck"
@@ -135,6 +137,21 @@
     }
   },
   "definitions": {
+    "exposureRules": {
+      "description": "What `deploy.exposure` decides about the rest of the deploy block. `none` means the workload does not listen, so the three fields that only make sense for something that does listen are refused rather than ignored: a port with nothing to publish it, a domain naming a way in that will not exist, and an HTTP probe with no port to reach. Every other exposure requires `port`, which is what every manifest written before `none` existed already declared. The rules live in one named subschema so a validator can recognise them and answer with the sentence the author needs instead of the sentence a generic JSON Schema error produces.",
+      "if": {
+        "required": ["exposure"],
+        "properties": { "exposure": { "const": "none" } }
+      },
+      "then": {
+        "properties": {
+          "port": false,
+          "domain": false,
+          "healthcheck": { "properties": { "path": false } }
+        }
+      },
+      "else": { "required": ["port"] }
+    },
     "healthcheck": {
       "type": "object",
       "additionalProperties": false,
@@ -294,7 +311,8 @@
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1,
-          "description": "How long the application has to answer for the FIRST time. This is a startup budget, not a request timeout: a cold host pulling an image and running migrations is nothing like the warm local runtime a manifest was written against, and too small a value rolls back an application that is merely slow."
+          "description": "How long the application has to answer for the FIRST time. This is a startup budget, not a request timeout: a cold host pulling an image and running migrations is nothing like the warm local runtime a manifest was written against, and too small a value rolls back an application that is merely slow.",
+          "x-flui-note": "The spec sets no maximum. Per-runtime: a single-node vOps deploy clamps the effective window to 120s at the low end and 600s at the high end — a smaller value never shortens the budget below the default, and a larger one is accepted and capped, so a single bad number cannot hang a deploy for an hour."
         },
         "retries": {
           "type": "integer",
@@ -351,7 +369,8 @@
         },
         "certChallenge": {
           "enum": ["http-01", "dns-01"],
-          "description": "ACME challenge. `dns-01` needs a DNS zone and supports wildcards."
+          "description": "ACME challenge. `dns-01` needs a DNS zone and supports wildcards.",
+          "x-flui-note": "`http-01` is applied everywhere. `dns-01` is per-runtime: a single-node vOps deploy does not implement it — the value is accepted and carried into the plan, and when the ingress is attached it warns by name and issues the certificate over http-01 instead, so no wildcard is obtained."
         },
         "certificateProvider": {
           "enum": ["lets-encrypt", "lets-encrypt-staging"],
@@ -473,7 +492,8 @@
             "service": {
               "type": "string",
               "pattern": "^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$",
-              "description": "Name of another Flui app in the same project. Resolved to that app's in-cluster Service address (the same DNS Flui uses to wire catalog building blocks); app-to-app traffic stays inside the cluster and never round-trips the public ingress. Cross-cluster references are not resolved. Per-environment scoping arrives with the environments block."
+              "description": "Name of another Flui app in the same project. Resolved to that app's in-cluster Service address (the same DNS Flui uses to wire catalog building blocks); app-to-app traffic stays inside the cluster and never round-trips the public ingress. Cross-cluster references are not resolved. Per-environment scoping arrives with the environments block.",
+              "x-flui-note": "Per-runtime: this branch names another Flui app, and a single-node vOps deploy REFUSES it — there is no cluster and vOps never wires two installs together. A database or cache the app needs is attached under `deploy.services` and read with `fromService` / `fromBBEnv` instead."
             },
             "key": {
               "enum": ["url", "host", "port"],

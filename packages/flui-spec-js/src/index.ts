@@ -11,3 +11,4 @@ export {
   applicationSchema,
   accessPolicySchema,
 } from './schemas';
+export { APPLICATION_EXPOSURE_DEFAULT } from './defaults';

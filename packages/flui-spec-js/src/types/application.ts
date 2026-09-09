@@ -141,6 +141,56 @@ export interface ApplicationEnvironmentProfile {
   env?: Record<string, string>;
 }
 
+/**
+ * How the workload is reached. `none` is the workload that does not listen — a worker, a queue
+ * consumer — and is always declared, never inferred from a missing port.
+ */
+export type ApplicationExposure = 'public' | 'internal' | 'none';
+
+/** Everything in `deploy` that reads the same whether or not the workload listens. */
+export interface ApplicationDeployCommon {
+  /** The post-deploy gate. Shared with `kind: CatalogApp`. */
+  smokeTest?: FluiSmokeTest;
+  resources?: ApplicationManifestResources;
+  scaling?: ApplicationManifestScaling;
+  env?: ApplicationEnv;
+  volumes?: ApplicationManifestVolume[];
+  /** Config files written beside the app and mounted read-only into the container. */
+  files?: ApplicationManifestFile[];
+  /** Building blocks attached to this application, inside its pod. */
+  services?: ApplicationAttachedService[];
+  /** Where the browser-facing runtime config file is written, and the global it assigns to. */
+  browserConfig?: { path: string; global?: string };
+  startCommand?: string;
+  /** Sentinel strings rewritten inside the image's own files, in the container, before the app starts. */
+  replaceAtStart?: ApplicationManifestReplaceAtStart;
+}
+
+/** A workload that listens: `port` is required, and a way in may be named. */
+export interface ApplicationDeployListening extends ApplicationDeployCommon {
+  exposure?: 'public' | 'internal';
+  port: number;
+  domain?: ApplicationManifestDomain;
+  healthcheck?: ApplicationManifestHealthcheck;
+}
+
+/**
+ * A workload that listens on nothing. The three fields that presuppose a listener are typed away
+ * rather than left optional: `port?: number` would compile for a manifest the schema refuses, and
+ * a type that accepts what the validator rejects is worse than no type at all.
+ */
+export interface ApplicationDeploySilent extends ApplicationDeployCommon {
+  exposure: 'none';
+  port?: never;
+  domain?: never;
+  /** An exec probe still works; an HTTP path does not, having no port to reach. */
+  healthcheck?: Omit<ApplicationManifestHealthcheck, 'path'> & { path?: never };
+}
+
+export type ApplicationDeploy =
+  | ApplicationDeployListening
+  | ApplicationDeploySilent;
+
 export interface ApplicationManifest {
   kind: 'Application';
   apiVersion: FluiApiVersion;
@@ -148,26 +198,10 @@ export interface ApplicationManifest {
     name: string;
   };
   build?: ApplicationManifestBuild;
-  deploy: {
-    port: number;
-    exposure?: 'public' | 'internal';
-    healthcheck?: ApplicationManifestHealthcheck;
-    /** The post-deploy gate. Shared with `kind: CatalogApp`. */
-    smokeTest?: FluiSmokeTest;
-    resources?: ApplicationManifestResources;
-    scaling?: ApplicationManifestScaling;
-    domain?: ApplicationManifestDomain;
-    env?: ApplicationEnv;
-    volumes?: ApplicationManifestVolume[];
-    /** Config files written beside the app and mounted read-only into the container. */
-    files?: ApplicationManifestFile[];
-    /** Building blocks attached to this application, inside its pod. */
-    services?: ApplicationAttachedService[];
-    /** Where the browser-facing runtime config file is written, and the global it assigns to. */
-    browserConfig?: { path: string; global?: string };
-    startCommand?: string;
-    /** Sentinel strings rewritten inside the image's own files, in the container, before the app starts. */
-    replaceAtStart?: ApplicationManifestReplaceAtStart;
-  };
+  /**
+   * Discriminated on `exposure`. Narrow before reading `port`, `domain` or `healthcheck.path`:
+   * `if (manifest.deploy.exposure === 'none')` on one side, everything else on the other.
+   */
+  deploy: ApplicationDeploy;
   environments?: Record<string, ApplicationEnvironmentProfile>;
 }

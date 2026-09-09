@@ -4,6 +4,62 @@ All notable changes to the Flui Spec are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-09
+
+`deploy.exposure: none` — a manifest can finally say that a workload does not
+listen, instead of having to invent a port for it.
+
+### Added
+
+- **`deploy.exposure: none`** — the third exposure: no port, no Service, no
+  endpoint. For a worker, a queue consumer, anything whose job is not to answer
+  requests. With `none`, `deploy.port`, `deploy.domain` and
+  `deploy.healthcheck.path` are **refused** rather than ignored: a port with
+  nothing to publish it, a domain naming a way in that will not exist, and an
+  HTTP probe with no port to reach are each a mistake worth a message. An `exec`
+  probe (`healthcheck.type: exec` with `command`) still works, because it needs
+  no port.
+- **`APPLICATION_EXPOSURE_DEFAULT`** — the package now exports the default
+  `deploy.exposure` read from the schema itself. `default` in JSON Schema is an
+  annotation and this validator does not materialise it (a parsed manifest keeps
+  `exposure: undefined` exactly as written), so every consumer that needed the
+  resolved value had been rebuilding it with its own `'public'` literal. The
+  schema is the one source; this export is a read of it.
+
+### Changed
+
+- **`deploy.port` is required unless `exposure: none`.** It was unconditionally
+  required. Every manifest valid before this release declares `port` and none
+  declares `none`, so every one of them lands in the branch that requires exactly
+  what it already had — measured, not assumed: 25 real `flui.yaml` in the engine
+  corpus and 58 machine-rendered manifests, zero changes of verdict.
+- **`exposure` is declared, never inferred.** A missing `deploy.port` is refused
+  with a message that names `exposure: none` as the alternative; it is never read
+  as "this must be a worker". Inferring one from the other would turn a forgotten
+  port into a silently unreachable application, which is the failure this release
+  exists to remove — not a new spelling for it.
+- **`none` does not cover a scheduled job.** The spec has no field for a
+  schedule. A cron deployed as a long-running workload restarts in a loop and
+  reports healthy; `exposure: none` says nothing about that and must not be read
+  as if it did.
+- **TypeScript: `deploy` is now a union discriminated on `exposure`.** The
+  `none` branch types `port`, `domain` and `healthcheck.path` as absent, so
+  reading `manifest.deploy.port` needs a narrowing (`if (deploy.exposure ===
+  'none')`) it did not need before. This is deliberate: a type that accepts what
+  the validator rejects is worse than no type.
+
+### Before publishing this version
+
+This working tree carries more than the published `0.9.0` tarball does, from
+work that landed after `0.9.0` was released without a version bump. Measured
+against `@flui-cloud/spec@0.9.0` on npm, `deploy` gains `services`, `files`,
+`smokeTest`, `replaceAtStart` and `browserConfig`; `build` gains `prepare`;
+`healthcheck` gains its timing and `type`/`command` fields; `domain` gains
+`httpsRequirement`. **None of those is implemented by flui-core**, and none is
+tagged `x-flui-status: planned`, so publishing them as-is makes the validator
+accept a manifest whose attached database will never exist, without a warning.
+Decide that before tagging — it is not part of this entry's change.
+
 ## [Unreleased]
 
 ### Added

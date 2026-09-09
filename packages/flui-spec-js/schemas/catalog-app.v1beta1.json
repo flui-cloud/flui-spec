@@ -1152,7 +1152,8 @@
           "enum": [
             "http-01",
             "dns-01"
-          ]
+          ],
+          "x-flui-note": "`http-01` is applied everywhere. `dns-01` is per-runtime: a single-node vOps deploy does not implement it — the value is accepted and carried into the plan, and when the ingress is attached it warns by name and issues the certificate over http-01 instead, so no wildcard is obtained."
         },
         "certificateProvider": {
           "type": "string",
@@ -1608,7 +1609,8 @@
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1,
-          "description": "How long the application has to answer for the FIRST time. This is a startup budget, not a request timeout: a cold host pulling an image and running migrations is nothing like the warm local runtime a manifest was written against, and too small a value rolls back an application that is merely slow."
+          "description": "How long the application has to answer for the FIRST time. This is a startup budget, not a request timeout: a cold host pulling an image and running migrations is nothing like the warm local runtime a manifest was written against, and too small a value rolls back an application that is merely slow.",
+          "x-flui-note": "The spec sets no maximum. Per-runtime: a single-node vOps deploy clamps the effective window to 120s at the low end and 600s at the high end — a smaller value never shortens the budget below the default, and a larger one is accepted and capped, so a single bad number cannot hang a deploy for an hour."
         },
         "retries": {
           "type": "integer",

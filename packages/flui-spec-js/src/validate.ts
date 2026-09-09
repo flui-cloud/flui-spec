@@ -319,8 +319,56 @@ function detectCycles(
   return null;
 }
 
+/**
+ * `#/definitions/exposureRules` in `application.v1beta1.json` says which of `port`, `domain` and
+ * `healthcheck.path` a given `deploy.exposure` allows. Ajv can enforce that; it cannot say it. A
+ * refused `port` comes back as `boolean schema is false`, and the `if` keyword adds a second,
+ * emptier line — a reader learns that something is wrong at `/deploy/port` and nothing about why,
+ * on a rule whose whole point is a distinction between two shapes.
+ *
+ * So each branch of that one subschema gets its sentence here, keyed by `schemaPath` (stable
+ * because the rules live in a named definition, not inline), and the bare `if` line is dropped.
+ * Nothing else in this file rewrites an ajv message: this is the one rule the schema states
+ * structurally and the author has to read in prose.
+ */
+const EXPOSURE_RULES = '#/definitions/exposureRules';
+
+const EXPOSURE_RULE_MESSAGES: Record<string, string> = {
+  '#/definitions/exposureRules/then/properties/port/false schema':
+    'deploy.port must not be set when exposure is none: a workload with no exposure listens on nothing, so there is no port to publish. Remove deploy.port, or choose exposure: public or internal.',
+  '#/definitions/exposureRules/then/properties/domain/false schema':
+    'deploy.domain must not be set when exposure is none: a domain names a way in, and none is the declaration that there is no way in. Remove deploy.domain, or choose exposure: public.',
+  '#/definitions/exposureRules/then/properties/healthcheck/properties/path/false schema':
+    'deploy.healthcheck.path must not be set when exposure is none: an HTTP probe needs a port to reach and none has none. Use an exec probe (healthcheck.type: exec with command) or remove the probe.',
+  '#/definitions/exposureRules/else/required':
+    "must have required property 'port' — declare the port the application listens on inside the container. A workload that listens on nothing (a worker, a queue consumer) declares exposure: none instead, and then has no port.",
+};
+
+function exposureRuleError(e: ErrorObject): FluiValidationError | null {
+  // `must match "then"/"else" schema`: true, and it says nothing the branch error below does not
+  // say better. Dropped so the author reads one sentence, not two.
+  if (e.keyword === 'if') return null;
+
+  const message = EXPOSURE_RULE_MESSAGES[e.schemaPath];
+  if (!message) return null;
+
+  const missing =
+    e.keyword === 'required'
+      ? (e.params as { missingProperty?: string }).missingProperty
+      : undefined;
+  return {
+    path: missing ? `${e.instancePath}/${missing}` : e.instancePath || '<root>',
+    message,
+    params: { exposureRule: true, ...(e.params as Record<string, unknown>) },
+  };
+}
+
 function formatAjvErrors(errors: ErrorObject[]): FluiValidationError[] {
-  return errors.map((e) => {
+  return errors.flatMap((e) => {
+    if (e.schemaPath.startsWith(EXPOSURE_RULES)) {
+      const rewritten = exposureRuleError(e);
+      return rewritten ? [rewritten] : [];
+    }
     // For `required`, ajv reports the parent object's path with the missing key
     // in params. Point the error at the missing field itself — friendlier for
     // humans and for LLMs consuming the error list.
@@ -331,11 +379,13 @@ function formatAjvErrors(errors: ErrorObject[]): FluiValidationError[] {
     const path = missing
       ? `${e.instancePath}/${missing}`
       : e.instancePath || '<root>';
-    return {
-      path,
-      message: e.message ?? 'invalid',
-      params: e.params as Record<string, unknown> | undefined,
-    };
+    return [
+      {
+        path,
+        message: e.message ?? 'invalid',
+        params: e.params as Record<string, unknown> | undefined,
+      },
+    ];
   });
 }
 

@@ -1,0 +1,36 @@
+# A workload that does not listen: it takes jobs off a queue and never answers a request.
+# `exposure: none` is what says so. It is declared here on purpose — the spec never reads a
+# missing `deploy.port` as "this must be a worker", because that would turn a forgotten port
+# into an application that runs and cannot be reached, with nothing said about it.
+#
+# With `none` there is no port, no domain and no HTTP health path: each of those would describe
+# a way in that does not exist. An `exec` probe still works, because it needs no port.
+#
+# This is NOT how a scheduled job is expressed. The spec has no field for a schedule, and a cron
+# deployed as a long-running workload restarts in a loop while reporting healthy.
+apiVersion: flui.cloud/v1beta1
+kind: Application
+metadata:
+  name: email-worker
+build:
+  strategy: dockerfile
+  dockerfile: ./Dockerfile
+  context: .
+deploy:
+  exposure: none
+  startCommand: exec node dist/worker.js
+  healthcheck:
+    type: exec
+    command: ['pgrep', '-f', 'dist/worker.js']
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    NODE_ENV: production
+    QUEUE_URL:
+      valueFrom:
+        secretRef: queue-url

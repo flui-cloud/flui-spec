@@ -9,6 +9,7 @@ const EXAMPLES_DIR = resolve(__dirname, '..', '..', '..', 'examples');
 describe('shipped examples', () => {
   it.each([
     'application/nextjs.flui.yaml',
+    'application/worker.flui.yaml',
     'catalog/minimal-standalone.flui.yaml',
   ])('validates %s', (relPath) => {
     const raw = readFileSync(resolve(EXAMPLES_DIR, relPath), 'utf-8');
