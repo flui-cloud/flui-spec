@@ -32,7 +32,7 @@
         "strategy": {
           "enum": ["dockerfile", "auto"],
           "default": "dockerfile",
-          "description": "`dockerfile` builds the repo Dockerfile. `auto` lets railpack detect the framework.",
+          "description": "`dockerfile` builds the repo Dockerfile, the way to build. `auto` (framework detection by railpack) is deprecated and kept only so older manifests still validate.",
           "x-flui-note": "`dockerfile` is applied everywhere. `auto` is per-runtime: a single-node vOps deploy REFUSES it with an error rather than accepting it, because the CI workflow it writes is hardcoded to a Dockerfile — accepting the value would fail in CI minutes later, on a repository the author owns."
         },
         "dockerfile": {
@@ -346,11 +346,10 @@
     "scaling": {
       "type": "object",
       "additionalProperties": false,
-      "x-flui-status": "planned",
-      "x-flui-note": "Not yet applied on source deploys — the manifest scaling block does not configure autoscaling yet. The app runs at a single replica.",
+      "description": "Replica range. When max is above min, replicas are added while CPU stays above 80% of the request and removed when it falls; memory is not used because it rarely falls after a peak.",
       "properties": {
-        "min": { "type": "integer", "minimum": 0 },
-        "max": { "type": "integer", "minimum": 1 }
+        "min": { "type": "integer", "minimum": 0, "description": "Replicas the app always runs. 0 is read as 1." },
+        "max": { "type": "integer", "minimum": 1, "description": "Most replicas the app may reach. Equal to min means a fixed count." }
       }
     },
     "domain": {

@@ -129,6 +129,13 @@ function collectApplicationWarnings(
   manifest: ApplicationManifest,
 ): FluiValidationWarning[] {
   const warnings: FluiValidationWarning[] = [];
+  if (manifest.build?.strategy === 'auto') {
+    warnings.push({
+      path: '/build/strategy',
+      message:
+        'build.strategy "auto" (framework detection) is deprecated — add a Dockerfile and use strategy "dockerfile". It is still accepted.',
+    });
+  }
   const deploy = manifest.deploy;
   if (!deploy) return warnings;
 
@@ -138,12 +145,6 @@ function collectApplicationWarnings(
     warnings.push({
       path: '/deploy/resources/profile',
       message: `resources.profile is ${NOT_APPLIED} — set resources.requests/limits instead (no effect at runtime yet).`,
-    });
-  }
-  if (deploy.scaling !== undefined) {
-    warnings.push({
-      path: '/deploy/scaling',
-      message: `deploy.scaling is ${NOT_APPLIED} — autoscaling is not configured from the manifest yet; the app runs at a single replica.`,
     });
   }
 

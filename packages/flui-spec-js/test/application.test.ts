@@ -152,7 +152,7 @@ const LEGACY_ENV = [
 ].join('\n');
 
 describe('validate(Application) — broad spec + planned warnings', () => {
-  it('accepts planned fields (profile, scaling, valueFrom, delivery) as valid', () => {
+  it('accepts planned fields (profile, valueFrom, delivery) and scaling as valid', () => {
     const r = validate(parseYaml(BROAD));
     expect(r.valid).toBe(true);
   });
@@ -162,7 +162,7 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     expect(r.valid).toBe(true);
     const paths = r.warnings.map((w) => w.path);
     expect(paths).toContain('/deploy/resources/profile');
-    expect(paths).toContain('/deploy/scaling');
+    expect(paths).not.toContain('/deploy/scaling');
     expect(paths).toContain('/deploy/env/PUBLIC_ID/delivery');
   });
 
@@ -187,6 +187,21 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     );
   });
 
+  it('warns that build.strategy auto is deprecated, without invalidating', () => {
+    const r = validate({
+      apiVersion: 'flui.cloud/v1beta1',
+      kind: 'Application',
+      metadata: { name: 'legacy' },
+      build: { strategy: 'auto' },
+      deploy: { port: 8080 },
+    });
+    expect(r.valid).toBe(true);
+    if (r.valid) {
+      expect(r.warnings.map((w) => w.path)).toEqual(['/build/strategy']);
+      expect(r.warnings[0].message).toMatch(/deprecated/);
+    }
+  });
+
   it('emits no warnings for a fully-implemented manifest', () => {
     const r = validate(parseYaml(VALID));
     expect(r.valid).toBe(true);
@@ -201,7 +216,7 @@ describe('validate(Application) — broad spec + planned warnings', () => {
     expect(s.definitions.resources.properties.profile['x-flui-status']).toBe(
       'planned',
     );
-    expect(s.definitions.scaling['x-flui-status']).toBe('planned');
+    expect(s.definitions.scaling['x-flui-status']).toBeUndefined();
     const entry = s.definitions.envEntry.oneOf[1].properties;
     expect(entry.delivery['x-flui-status']).toBe('planned');
     expect(s.definitions.envVarLegacy.properties.userEditable['x-flui-status']).toBe('planned');

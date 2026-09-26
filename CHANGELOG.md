@@ -4,6 +4,25 @@ All notable changes to the Flui Spec are documented here. The format is based
 on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-09-26
+
+`deploy.scaling` is applied, and framework detection is on its way out.
+
+### Changed
+
+- **`deploy.scaling` is no longer `planned`.** Flui applies it: when `max` is
+  above `min`, replicas are added while CPU stays above 80% of the request and
+  removed when it falls (memory is not used, because it rarely falls after a
+  peak). `min: 0` is read as 1; `min` equal to `max` is a fixed count. The
+  validator no longer warns about it, and the schema describes both fields.
+
+### Deprecated
+
+- **`build.strategy: auto`** (framework detection by railpack). It still
+  validates, so older manifests keep working, but the validator now returns a
+  warning on `/build/strategy` asking for a Dockerfile and `strategy:
+  dockerfile`.
+
 ## [0.10.0] - 2026-09-09
 
 `deploy.exposure: none` — a manifest can finally say that a workload does not
